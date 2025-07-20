@@ -218,45 +218,11 @@ def reorder(data: IntoDataFrameT, rows: list[int], columns: list[str]) -> IntoDa
 
 
 # group_splits ----
-@singledispatch
-def group_splits(data: DataFrameLike, group_key: str) -> dict[Any, list[int]]:
-    raise NotImplementedError(f"Unsupported data type: {type(data)}")
-
-
-@group_splits.register
-def _(data: PdDataFrame, group_key: str) -> dict[Any, list[int]]:
-    g_df = data.groupby(group_key, dropna=False)
-    return {k: list(v) for k, v in g_df.indices.items()}
-
-
-@group_splits.register
-def _(data: PlDataFrame, group_key: str) -> dict[Any, list[int]]:
-    # TODO: should ensure row count name isn't already in data
-    import polars as pl
-
-    # with_row_index supercedes with_row_count
-    meth_row_number = getattr(data, "with_row_index", None)
-    if not meth_row_number:
-        meth_row_number = data.with_row_count
-
-    groups = meth_row_number("__row_count__").group_by(group_key).agg(pl.col("__row_count__"))
-
-    res = dict(zip(groups[group_key].to_list(), groups["__row_count__"].to_list()))
-    return res
-
-
-@group_splits.register
-def _(data: PyArrowTable, group_key: str) -> dict[Any, list[int]]:
-    import pyarrow.compute as pc
-
-    group_col = data.column(group_key)
-    encoded = group_col.dictionary_encode().combine_chunks()
-
-    d = {}
-    for idx, group_key in enumerate(encoded.dictionary):
-        mask = pc.equal(encoded.indices, idx)
-        d[group_key.as_py()] = pc.indices_nonzero(mask).to_pylist()
-    return d
+def group_splits(data: IntoDataFrame, group_key: str) -> dict[str | int, list[int]]:
+    frame = nw.from_native(data, eager_only=True)
+    token = nw.generate_temporary_column_name(8, columns=frame.columns)
+    grouped = frame.with_row_index(name=token).select([group_key, token]).group_by(group_key)
+    return {k[0]: grp.get_column(token).to_list() for k, grp in grouped}
 
 
 # eval_select ----
@@ -409,19 +375,9 @@ def _eval_select_from_list(
 
 
 @singledispatch
-def create_empty_frame(df: IntoDataFrameT) -> IntoDataFrameT:
+def create_empty_frame(df: DataFrameLike) -> DataFrameLike:
     """Return a DataFrame with the same shape, but all nan string columns"""
     raise NotImplementedError(f"Unsupported type: {type(df)}")
-
-
-# def create_empty_frame(df: IntoDataFrameT) -> IntoDataFrameT:
-#     """Return a DataFrame with the same shape, but all nan string columns"""
-#     frame = nw.from_native(df, eager_only=True)
-#     empty_frame = (
-#         nw.from_dict(dict.fromkeys(frame.columns, []), backend=frame.implementation)
-#         .select(nw.all().cast(nw.String()))
-#     )
-#     return empty_frame.to_native()
 
 
 @create_empty_frame.register
@@ -447,7 +403,7 @@ def _(df: PyArrowTable):
 
 def copy_frame(df: IntoDataFrameT) -> IntoDataFrameT:
     """Return a copy of the input DataFrame"""
-    return nw.from_native(df).clone().to_native()
+    return nw.from_native(df, eager_only=True).clone().to_native()
 
 
 # cast_frame_to_string ----
@@ -493,8 +449,8 @@ def replace_null_frame(df: IntoDataFrameT, replacement: IntoDataFrameT) -> IntoD
     """Return a copy of the input DataFrame with all null values replaced with replacement"""
     df_nw = nw.from_native(df, eager_only=True)
     replacement_nw = nw.from_native(replacement, eager_only=True)
-    exprs = [nw.col(name).fill_null(replacement_nw[name]) for name in df_nw.columns]
-    return df_nw.select(exprs).to_native()
+    exprs = (df_nw[name].fill_null(replacement_nw[name]).alias(name) for name in df_nw.columns)
+    return df_nw.select(*exprs).to_native()
 
 
 def to_list(ser: IntoSeries) -> list[Any]:
