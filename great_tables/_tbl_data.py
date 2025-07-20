@@ -5,6 +5,8 @@ import warnings
 from functools import singledispatch
 from typing import TYPE_CHECKING, Any, Callable, Optional, Union
 
+import narwhals.stable.v1 as nw
+from narwhals.typing import IntoDataFrame, IntoDataFrameT, IntoSeries
 from typing_extensions import TypeAlias
 
 from ._databackend import AbstractBackend
@@ -139,99 +141,27 @@ class Agnostic:
 
 
 # copy_data ----
-@singledispatch
-def copy_data(data: DataFrameLike) -> DataFrameLike:
+def copy_data(data: IntoDataFrameT) -> IntoDataFrameT:
     """Copy the stored table data"""
-    _raise_not_implemented(data)
-
-
-@copy_data.register(PdDataFrame)
-def _(data: PdDataFrame):
-    return data.copy()
-
-
-@copy_data.register(PlDataFrame)
-def _(data: PlDataFrame):
-    return data.clone()
-
-
-@copy_data.register(PyArrowTable)
-def _(data: PyArrowTable):
-    import pyarrow as pa
-
-    return pa.table(data)
+    return nw.from_native(data, eager_only=True).clone().to_native()
 
 
 # get_column_names ----
-@singledispatch
-def get_column_names(data: DataFrameLike) -> list[str]:
+def get_column_names(data: IntoDataFrame) -> list[str]:
     """Get a list of column names from the input data table"""
-    _raise_not_implemented(data)
-
-
-@get_column_names.register(PdDataFrame)
-def _(data: PdDataFrame):
-    return data.columns.tolist()
-
-
-@get_column_names.register(PlDataFrame)
-def _(data: PlDataFrame):
-    return data.columns
-
-
-@get_column_names.register(PyArrowTable)
-def _(data: PyArrowTable):
-    return data.column_names
+    return nw.from_native(data, eager_only=True).columns
 
 
 # n_rows ----
-
-
-@singledispatch
-def n_rows(data: DataFrameLike) -> int:
+def n_rows(data: IntoDataFrame) -> int:
     """Get the number of rows from the input data table"""
-    raise _raise_not_implemented(data)
-
-
-@n_rows.register(PdDataFrame)
-@n_rows.register(PlDataFrame)
-def _(data: Any) -> int:
-    return len(data)
-
-
-@n_rows.register(PyArrowTable)
-def _(data: PyArrowTable) -> int:
-    return data.num_rows
+    return len(nw.from_native(data, eager_only=True))
 
 
 # _get_cell ----
-
-
-@singledispatch
-def _get_cell(data: DataFrameLike, row: int, column: str) -> Any:
+def _get_cell(data: IntoDataFrame, row: int, column: str) -> Any:
     """Get the content from a single cell in the input data table"""
-
-    _raise_not_implemented(data)
-
-
-@_get_cell.register(PlDataFrame)
-def _(data: Any, row: int, column: str) -> Any:
-    return data[column][row]
-
-
-@_get_cell.register(PdDataFrame)
-def _(data: Any, row: int, col: str) -> Any:
-    col_ii = data.columns.get_loc(col)
-
-    if not isinstance(col_ii, int):
-        raise ValueError("Column named " + col + " matches multiple columns.")
-
-    return data.iloc[row, col_ii]
-
-
-@_get_cell.register(PyArrowTable)
-def _(data: PyArrowTable, row: int, column: str) -> Any:
-    return data.column(column)[row].as_py()
+    return nw.from_native(data, eager_only=True).item(row=row, column=column)
 
 
 # _set_cell ----
@@ -282,30 +212,9 @@ def _(data: PyArrowTable, column: str) -> Any:
 
 
 # reorder ----
-
-
-@singledispatch
-def reorder(data: DataFrameLike, rows: list[int], columns: list[str]) -> DataFrameLike:
+def reorder(data: IntoDataFrameT, rows: list[int], columns: list[str]) -> IntoDataFrameT:
     """Return a re-ordered DataFrame."""
-    _raise_not_implemented(data)
-
-
-@reorder.register
-def _(data: PdDataFrame, rows: list[int], columns: list[str]) -> PdDataFrame:
-    # note that because loc is label based, we need
-    # reset index to allow us to use integer indexing on the rows
-    # note that this means the index is not preserved when reordering pandas
-    return data.iloc[rows, :].loc[:, columns]
-
-
-@reorder.register
-def _(data: PlDataFrame, rows: list[int], columns: list[str]) -> PlDataFrame:
-    return data[rows, columns]
-
-
-@reorder.register
-def _(data: PyArrowTable, rows: list[int], columns: list[str]) -> PyArrowTable:
-    return data.select(columns).take(rows)
+    return nw.from_native(data, eager_only=True)[rows, columns].to_native()
 
 
 # group_splits ----
@@ -500,9 +409,19 @@ def _eval_select_from_list(
 
 
 @singledispatch
-def create_empty_frame(df: DataFrameLike) -> DataFrameLike:
+def create_empty_frame(df: IntoDataFrameT) -> IntoDataFrameT:
     """Return a DataFrame with the same shape, but all nan string columns"""
     raise NotImplementedError(f"Unsupported type: {type(df)}")
+
+
+# def create_empty_frame(df: IntoDataFrameT) -> IntoDataFrameT:
+#     """Return a DataFrame with the same shape, but all nan string columns"""
+#     frame = nw.from_native(df, eager_only=True)
+#     empty_frame = (
+#         nw.from_dict(dict.fromkeys(frame.columns, []), backend=frame.implementation)
+#         .select(nw.all().cast(nw.String()))
+#     )
+#     return empty_frame.to_native()
 
 
 @create_empty_frame.register
@@ -526,27 +445,9 @@ def _(df: PyArrowTable):
     return pa.table({col: pa.nulls(df.num_rows, type=pa.string()) for col in df.column_names})
 
 
-@singledispatch
-def copy_frame(df: DataFrameLike) -> DataFrameLike:
+def copy_frame(df: IntoDataFrameT) -> IntoDataFrameT:
     """Return a copy of the input DataFrame"""
-    raise NotImplementedError(f"Unsupported type: {type(df)}")
-
-
-@copy_frame.register
-def _(df: PdDataFrame):
-    return df.copy()
-
-
-@copy_frame.register
-def _(df: PlDataFrame):
-    return df.clone()
-
-
-@copy_frame.register
-def _(df: PyArrowTable):
-    import pyarrow as pa
-
-    return pa.table({col: pa.array(df.column(col)) for col in df.column_names})
+    return nw.from_native(df).clone().to_native()
 
 
 # cast_frame_to_string ----
@@ -588,89 +489,21 @@ def _(df: PyArrowTable):
 # replace_null_frame ----
 
 
-@singledispatch
-def replace_null_frame(df: DataFrameLike, replacement: DataFrameLike) -> DataFrameLike:
+def replace_null_frame(df: IntoDataFrameT, replacement: IntoDataFrameT) -> IntoDataFrameT:
     """Return a copy of the input DataFrame with all null values replaced with replacement"""
-    raise NotImplementedError(f"Unsupported type: {type(df)}")
+    df_nw = nw.from_native(df, eager_only=True)
+    replacement_nw = nw.from_native(replacement, eager_only=True)
+    exprs = [nw.col(name).fill_null(replacement_nw[name]) for name in df_nw.columns]
+    return df_nw.select(exprs).to_native()
 
 
-@replace_null_frame.register
-def _(df: PdDataFrame, replacement: DataFrameLike):
-    return df.fillna(replacement)
-
-
-@replace_null_frame.register
-def _(df: PlDataFrame, replacement: PlDataFrame):
-    import polars as pl
-
-    exprs = [pl.col(name).fill_null(replacement[name]) for name in df.columns]
-    return df.select(exprs)
-
-
-@replace_null_frame.register
-def _(df: PyArrowTable, replacement: PyArrowTable):
-    import pyarrow as pa
-    import pyarrow.compute as pc
-
-    return pa.table(
-        {
-            col: pc.if_else(pc.is_null(df.column(col)), replacement.column(col), df.column(col))
-            for col in df.column_names
-        }
-    )
-
-
-@singledispatch
-def to_list(ser: SeriesLike) -> list[Any]:
-    raise NotImplementedError(f"Unsupported type: {type(ser)}")
-
-
-@to_list.register
-def _(ser: PdSeries) -> list[Any]:
-    return ser.tolist()
-
-
-@to_list.register
-def _(ser: PlSeries) -> list[Any]:
-    return ser.to_list()
-
-
-@to_list.register
-def _(ser: PyArrowArray) -> list[Any]:
-    return ser.to_pylist()
-
-
-@to_list.register
-def _(ser: PyArrowChunkedArray) -> list[Any]:
-    return ser.to_pylist()
+def to_list(ser: IntoSeries) -> list[Any]:
+    return nw.from_native(ser, series_only=True).to_list()
 
 
 # is_series ----
-
-
-@singledispatch
 def is_series(ser: Any) -> bool:
-    return False
-
-
-@is_series.register
-def _(ser: PdSeries) -> bool:
-    return True
-
-
-@is_series.register
-def _(ser: PlSeries) -> bool:
-    return True
-
-
-@is_series.register
-def _(ser: PyArrowArray) -> bool:
-    return True
-
-
-@is_series.register
-def _(ser: PyArrowChunkedArray) -> bool:
-    return True
+    return nw.dependencies.is_into_series(ser)
 
 
 # mutate ----
@@ -825,10 +658,15 @@ def _(df: PyArrowTable) -> PyArrowTable:
 # to_frame ----
 
 
-@singledispatch
-def to_frame(ser: "list[Any] | SeriesLike", name: Optional[str] = None) -> DataFrameLike:
+def to_frame(ser: "list[Any] | IntoSeries", name: Optional[str] = None) -> IntoDataFrame:
     # TODO: remove pandas. currently, we support converting a list to a pd.DataFrame
     # in order to support backwards compatibility in the vals.fmt_* functions.
+
+    if nw.dependencies.is_into_series(ser):
+        ser_nw = nw.from_native(ser, series_only=True)
+        if name:
+            ser_nw = ser_nw.rename(name)
+        return ser_nw.to_frame().to_native()
 
     try:
         import pandas as pd
@@ -845,27 +683,3 @@ def to_frame(ser: "list[Any] | SeriesLike", name: Optional[str] = None) -> DataF
         raise ValueError("name must be specified, when converting a list to a DataFrame.")
 
     return pd.DataFrame({name: ser})
-
-
-@to_frame.register
-def _(ser: PdSeries, name: Optional[str] = None) -> PdDataFrame:
-    return ser.to_frame(name)
-
-
-@to_frame.register
-def _(ser: PlSeries, name: Optional[str] = None) -> PlDataFrame:
-    return ser.to_frame(name)
-
-
-@to_frame.register
-def _(ser: PyArrowArray, name: Optional[str] = None) -> PyArrowTable:
-    import pyarrow as pa
-
-    return pa.table({name: ser})
-
-
-@to_frame.register
-def _(ser: PyArrowChunkedArray, name: Optional[str] = None) -> PyArrowTable:
-    import pyarrow as pa
-
-    return pa.table({name: ser})
