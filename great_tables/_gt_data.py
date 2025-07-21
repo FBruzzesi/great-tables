@@ -7,6 +7,8 @@ from dataclasses import dataclass, field, replace
 from enum import Enum, auto
 from typing import TYPE_CHECKING, Any, Callable, Literal, Protocol, TypeVar, overload
 
+import narwhals.stable.v1 as nw
+from narwhals.typing import IntoDataFrame
 from typing_extensions import Self, TypeAlias, Union
 
 from ._helpers import GoogleFontImports
@@ -22,9 +24,6 @@ from ._tbl_data import (
     _set_cell,
     copy_frame,
     create_empty_frame,
-    get_column_names,
-    n_rows,
-    to_list,
     validate_frame,
 )
 from ._text import BaseText
@@ -51,7 +50,7 @@ class FramelessData:
 
 
 def _prep_gt(
-    data, rowname_col: str | None, groupname_col: str | None, auto_align: bool
+    data: nw.DataFrame[Any], rowname_col: str | None, groupname_col: str | None, auto_align: bool
 ) -> tuple[Stub, Boxhead]:
     # this function is similar to Stub._set_cols, except it differs in two ways.
     #   * it supports auto-alignment (an expensive operation)
@@ -67,7 +66,7 @@ def _prep_gt(
 
 @dataclass(frozen=True)
 class GTData:
-    _tbl_data: TblData
+    _tbl_data: IntoDataFrame
     _body: Body
     _boxhead: Boxhead
     _stub: Stub
@@ -98,7 +97,7 @@ class GTData:
     @classmethod
     def from_data(
         cls,
-        data: TblData,
+        data: IntoDataFrame,
         rowname_col: str | None = None,
         groupname_col: str | None = None,
         auto_align: bool = True,
@@ -106,7 +105,10 @@ class GTData:
         locale: str | None = None,
     ):
         data = validate_frame(data)
-        stub, boxhead = _prep_gt(data, rowname_col, groupname_col, auto_align)
+        data_nw: nw.DataFrame[Any] = nw.from_native(
+            data, eager_only=True, allow_series=False, strict=True
+        )
+        stub, boxhead = _prep_gt(data_nw, rowname_col, groupname_col, auto_align)
 
         if id is not None:
             options = Options(table_id=OptionsInfo(True, "table", "value", id))
@@ -266,7 +268,7 @@ class Boxhead(_Sequence[ColInfo]):
 
     def __new__(
         cls,
-        data: TblData | list[ColInfo],
+        data: IntoDataFrame | nw.DataFrame[Any] | list[ColInfo],
         auto_align: bool = True,
         rowname_col: str | None = None,
         groupname_col: str | None = None,
@@ -278,8 +280,7 @@ class Boxhead(_Sequence[ColInfo]):
         else:
             # Obtain the column names from the data and initialize the
             # `_boxhead` from that
-            column_names = get_column_names(data)
-            obj._d = [ColInfo(col) for col in column_names]
+            obj._d = [ColInfo(col) for col in nw.from_native(data, eager_only=True).columns]
             obj = obj.set_stub_cols(rowname_col, groupname_col)
 
         if not isinstance(data, list) and auto_align:
@@ -289,7 +290,7 @@ class Boxhead(_Sequence[ColInfo]):
 
     def __init__(
         self,
-        data: TblData | list[ColInfo],
+        data: IntoDataFrame | nw.DataFrame[Any] | list[ColInfo],
         auto_align: bool = True,
         rowname_col: str | None = None,
         groupname_col: str | None = None,
@@ -343,30 +344,31 @@ class Boxhead(_Sequence[ColInfo]):
     def set_cols_unhidden(self, colnames: list[str]) -> Self:
         return self._set_cols_info_type(colnames=colnames, colinfo_type=ColInfoTypeEnum.default)
 
-    def align_from_data(self, data: TblData) -> Self:
+    def align_from_data(self, data: IntoDataFrame | nw.DataFrame[Any]) -> Self:
         """Updates align attribute in entries based on data types."""
 
+        data_nw = nw.from_native(data, eager_only=True)
+        col_names = data_nw.columns
         # TODO: validate that data columns and ColInfo list correspond
-        if len(get_column_names(data)) != len(self._d):
+        if len(col_names) != len(self._d):
             raise ValueError("Number of data columns must match length of Boxhead")
 
-        if any(
-            col_info.var != col_name for col_info, col_name in zip(self._d, get_column_names(data))
-        ):
+        if any(col_info.var != col_name for col_info, col_name in zip(self._d, col_names)):
             raise ValueError("Column names must match between data and Boxhead")
 
         # Obtain a list of column classes for each of the column names by iterating
         # through each of the columns and obtaining the type of the column from
         # a Pandas DataFrame or a Polars DataFrame
         col_classes = []
-        for col in get_column_names(data):
-            dtype = _get_column_dtype(data, col)
+        data_native = data_nw.to_native()
+        for col in col_names:
+            dtype = _get_column_dtype(data_native, col)
 
             if dtype == "object":
                 # Check whether all values in 'object' columns are strings that
                 # for all intents and purpose are 'number-like'
 
-                col_vals = data[col].to_list()
+                col_vals = data_nw.get_column(col).to_list()
 
                 # Detect whether all non-NA values in the column are 'number-like'
                 # through use of a regular expression
@@ -611,21 +613,26 @@ class Stub:
 
     @classmethod
     def from_data(
-        cls, data, rowname_col: str | None = None, groupname_col: str | None = None
+        cls,
+        data: IntoDataFrame | nw.DataFrame[Any],
+        rowname_col: str | None = None,
+        groupname_col: str | None = None,
     ) -> Self:
         # Obtain a list of row indices from the data and initialize
         # the `_stub` from that
-        row_indices = list(range(n_rows(data)))
+        data_nw = nw.from_native(data, eager_only=True)
+        _n_rows = len(data_nw)
+        row_indices = range(_n_rows)
 
         if groupname_col is not None:
-            group_id = to_list(data[groupname_col])
+            group_id = data_nw.get_column(groupname_col).to_list()
         else:
-            group_id = [None] * n_rows(data)
+            group_id = [None] * _n_rows
 
         if rowname_col is not None:
-            row_names = to_list(data[rowname_col])
+            row_names = data_nw.get_column(rowname_col).to_list()
         else:
-            row_names = [None] * n_rows(data)
+            row_names = [None] * _n_rows
 
         # Obtain the column names from the data and initialize the
         # `_stub` from that
@@ -635,7 +642,7 @@ class Stub:
         group_names = OrderedSet(
             row.group_id for row in row_info if row.group_id is not None
         ).as_list()
-        group_rows = GroupRows(data, group_key=groupname_col).reorder(group_names)
+        group_rows = GroupRows(data_nw, group_key=groupname_col).reorder(group_names)
 
         return cls(row_info, group_rows)
 
@@ -766,7 +773,11 @@ class MISSING_GROUP:
 class GroupRows(_Sequence[GroupRowInfo]):
     _d: list[GroupRowInfo]
 
-    def __init__(self, data: list[GroupRowInfo] | DataFrameLike, group_key: str | None = None):
+    def __init__(
+        self,
+        data: list[GroupRowInfo] | nw.DataFrame[Any] | IntoDataFrame,
+        group_key: str | None = None,
+    ):
         if isinstance(data, list):
             self._d = data
 
@@ -777,9 +788,10 @@ class GroupRows(_Sequence[GroupRowInfo]):
         else:
             from ._tbl_data import group_splits
 
-            self._d = []
-            for group_id, ind in group_splits(data, group_key=group_key).items():
-                self._d.append(GroupRowInfo(group_id, indices=ind))
+            self._d = [
+                GroupRowInfo(group_id, indices=ind)
+                for group_id, ind in group_splits(data, group_key=group_key).items()
+            ]
 
     def reorder(self, group_ids: list[str | MISSING_GROUP]) -> Self:
         # TODO: validate all group_ids are in data
