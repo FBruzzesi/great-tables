@@ -19,9 +19,7 @@ from ._tbl_data import (
     Agnostic,
     DataFrameLike,
     TblData,
-    _get_cell,
     _get_column_dtype,
-    _set_cell,
     copy_frame,
     create_empty_frame,
     validate_frame,
@@ -175,25 +173,48 @@ class _Sequence(Sequence[T]):
 # I've left for now, and have just implemented concretes for it in
 # _tbl_data.py
 class Body:
-    body: TblData
+    _body: nw.DataFrame[Any]
 
-    def __init__(self, body: TblData):
+    def __init__(self, body: IntoDataFrame | nw.DataFrame[Any]):
         self.body = body
 
-    def render_formats(self, data_tbl: TblData, formats: list[FormatInfo], context: Any):
+    @property
+    def body(self) -> IntoDataFrame:
+        return self._body.to_native()
+
+    @body.setter
+    def body(self, value: IntoDataFrame) -> None:
+        self._body = nw.from_native(value, eager_only=True, pass_through=False)
+
+    def render_formats(
+        self, data_tbl: IntoDataFrame | nw.DataFrame[Any], formats: list[FormatInfo], context: Any
+    ):
+        data_nw = nw.from_native(data_tbl, eager_only=True)
         for fmt in formats:
             eval_func = getattr(fmt.func, context, fmt.func.default)
             if eval_func is None:
                 raise Exception("Internal Error")
+
+            remap: dict[str, dict[str, list[Any]]] = {}
             for col, row in fmt.cells.resolve():
-                result = eval_func(_get_cell(data_tbl, row, col))
+                result = eval_func(data_nw.item(row=row, column=col))
                 if isinstance(result, FormatterSkipElement):
                     continue
 
                 # TODO: I think that this is very inefficient with polars, so
                 # we could either accumulate results and set them per column, or
                 # could always use a pandas DataFrame inside Body?
-                self.body = _set_cell(self.body, row, col, result)
+                if col in remap:
+                    remap[col]["indices"].append(row)
+                    remap[col]["values"].append(result)
+                else:
+                    remap[col] = {"indices": [row], "values": [result]}
+
+            new_cols = {
+                c: self._body.get_column(c).scatter(**kwargs) for c, kwargs in remap.items()
+            }
+
+            self.body = self._body.with_columns(**new_cols)
 
         return self
 
@@ -663,7 +684,7 @@ class Stub:
     def group_ids(self) -> RowGroups:
         return [group.group_id for group in self.group_rows]
 
-    def reorder_rows(self, indices) -> Self:
+    def reorder_rows(self, indices: Sequence[int]) -> Self:
         new_rows = [self.rows[ii] for ii in indices]
 
         return self.__class__(new_rows, self.group_rows)
