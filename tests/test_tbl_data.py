@@ -82,9 +82,6 @@ def test_set_cell(df: DataFrameLike):
         expected = df.__class__(expected_data)
 
     new_df = _set_cell(df, 1, "col2", "x")
-    if new_df is None:
-        # Some implementations do in-place modifications
-        new_df = df
     assert_frame_equal(new_df, expected)
 
 

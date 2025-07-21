@@ -272,7 +272,7 @@ def _migrate_unformatted_to_output(
 
         result = _process_text(cell_value_str, context=context)
 
-        _set_cell(data._body.body, row, col, result)
+        data._body.body = _set_cell(data._body.body, row, col, result)
 
     return data
 

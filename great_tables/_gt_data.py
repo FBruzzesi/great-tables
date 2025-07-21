@@ -20,7 +20,7 @@ from ._tbl_data import (
     _get_cell,
     _get_column_dtype,
     _set_cell,
-    copy_data,
+    copy_frame,
     create_empty_frame,
     get_column_names,
     n_rows,
@@ -200,7 +200,7 @@ class Body:
         return self
 
     def copy(self) -> Self:
-        return self.__class__(copy_data(self.body))
+        return self.__class__(copy_frame(self.body))
 
     @classmethod
     def from_empty(cls, body: DataFrameLike):

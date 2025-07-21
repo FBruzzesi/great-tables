@@ -140,25 +140,33 @@ class Agnostic:
 # generic functions ----
 
 
-# copy_data ----
-def copy_data(data: IntoDataFrameT) -> IntoDataFrameT:
-    """Copy the stored table data"""
-    return nw.from_native(data, eager_only=True).clone().to_native()
+# copy_frame ----
+
+
+def copy_frame(df: IntoDataFrameT) -> IntoDataFrameT:
+    """Return a copy of the input DataFrame"""
+    return nw.from_native(df, eager_only=True).clone().to_native()
 
 
 # get_column_names ----
+
+
 def get_column_names(data: IntoDataFrame) -> list[str]:
     """Get a list of column names from the input data table"""
     return nw.from_native(data, eager_only=True).columns
 
 
 # n_rows ----
+
+
 def n_rows(data: IntoDataFrame) -> int:
     """Get the number of rows from the input data table"""
     return len(nw.from_native(data, eager_only=True))
 
 
 # _get_cell ----
+
+
 def _get_cell(data: IntoDataFrame, row: int, column: str) -> Any:
     """Get the content from a single cell in the input data table"""
     return nw.from_native(data, eager_only=True).item(row=row, column=column)
@@ -167,34 +175,10 @@ def _get_cell(data: IntoDataFrame, row: int, column: str) -> Any:
 # _set_cell ----
 
 
-@singledispatch
-def _set_cell(data: DataFrameLike, row: int, column: str, value: Any):
-    _raise_not_implemented(data)
-
-
-@_set_cell.register(PdDataFrame)
-def _(data, row: int, column: str, value: Any) -> None:
-    # TODO: This assumes column names are unique
-    # if this is violated, get_loc will return a mask
-    col_indx = data.columns.get_loc(column)
-    data.iloc[row, col_indx] = value
-
-
-@_set_cell.register(PlDataFrame)
-def _(data, row: int, column: str, value: Any) -> None:
-    data[row, column] = value
-
-
-@_set_cell.register(PyArrowTable)
-def _(data: PyArrowTable, row: int, column: str, value: Any) -> PyArrowTable:
-    import pyarrow as pa
-
-    colindex = data.column_names.index(column)
-    col = data.column(column)
-    pylist = col.to_pylist()
-    pylist[row] = value
-    data = data.set_column(colindex, column, pa.array(pylist))
-    return data
+def _set_cell(data: IntoDataFrameT, row: int, column: str, value: Any) -> IntoDataFrameT:
+    frame = nw.from_native(data, eager_only=True)
+    new_col = frame.get_column(column).scatter(row, value)
+    return frame.with_columns(**{column: new_col}).to_native()
 
 
 # _get_column_dtype ----
@@ -401,11 +385,6 @@ def _(df: PyArrowTable):
     return pa.table({col: pa.nulls(df.num_rows, type=pa.string()) for col in df.column_names})
 
 
-def copy_frame(df: IntoDataFrameT) -> IntoDataFrameT:
-    """Return a copy of the input DataFrame"""
-    return nw.from_native(df, eager_only=True).clone().to_native()
-
-
 # cast_frame_to_string ----
 
 
@@ -439,7 +418,9 @@ def _(df: PlDataFrame):
 def _(df: PyArrowTable):
     import pyarrow as pa
 
-    return pa.table({col: pa.array(df.column(col).cast(pa.string())) for col in df.column_names})
+    return pa.table(
+        {col: df.column(col).cast(pa.string()).combine_chunks() for col in df.column_names}
+    )
 
 
 # replace_null_frame ----
@@ -458,6 +439,8 @@ def to_list(ser: IntoSeries) -> list[Any]:
 
 
 # is_series ----
+
+
 def is_series(ser: Any) -> bool:
     return nw.dependencies.is_into_series(ser)
 
@@ -539,7 +522,7 @@ def _(df: PlDataFrame, x: Any) -> bool:
 
     import polars as pl
 
-    return isinstance(x, (pl.Null, type(None))) or (isinstance(x, float) and isnan(x))
+    return x is None or isinstance(x, pl.Null) or (isinstance(x, float) and isnan(x))
 
 
 @is_na.register
@@ -547,7 +530,7 @@ def _(df: PyArrowTable, x: Any) -> bool:
     import pyarrow as pa
 
     arr = pa.array([x])
-    return arr.is_null().to_pylist()[0] or arr.is_nan().to_pylist()[0]
+    return arr.is_null(nan_is_null=True)[0].as_py()
 
 
 @singledispatch
