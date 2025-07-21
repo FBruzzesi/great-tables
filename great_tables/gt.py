@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+import narwhals.stable.v1 as nw
 from typing_extensions import Self
 
 # Main gt imports ----
@@ -63,7 +64,6 @@ from ._stub import reorder_stub_df
 from ._stubhead import tab_stubhead
 from ._substitution import sub_missing, sub_zero
 from ._tab_create_modify import tab_style
-from ._tbl_data import _get_cell, n_rows
 from ._utils import _migrate_unformatted_to_output
 from ._utils_render_html import (
     _get_table_defs,
@@ -460,12 +460,6 @@ def _get_column_labels(gt: GT, context: str) -> list[str | BaseText | None]:
 
 def _get_column_of_values(gt: GT, column_name: str, context: str) -> list[str]:
     gt_built = gt._build_data(context=context)
-    tbl_data = gt_built._body.body
-    cell_values: list[str] = []
-
-    for i in range(n_rows(tbl_data)):
-        cell_content: Any = _get_cell(tbl_data, i, column_name)
-        cell_str: str = str(cell_content)
-        cell_values.append(cell_str)
-
+    tbl_data = nw.from_native(gt_built._body.body, eager_only=True)
+    cell_values: list[str] = [str(x) for x in tbl_data.get_column(column_name).to_list()]
     return cell_values
