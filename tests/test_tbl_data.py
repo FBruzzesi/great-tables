@@ -11,7 +11,6 @@ from great_tables._tbl_data import (
     SeriesLike,
     _get_cell,
     _get_column_dtype,
-    _set_cell,
     _validate_selector_list,
     cast_frame_to_string,
     create_empty_frame,
@@ -72,17 +71,6 @@ def test_get_column_dtypes(df: DataFrameLike):
 
 def test_get_cell(df: DataFrameLike):
     assert _get_cell(df, 1, "col2") == "b"
-
-
-def test_set_cell(df: DataFrameLike):
-    expected_data = {"col1": [1, 2, 3], "col2": ["a", "x", "c"], "col3": [4.0, 5.0, 6.0]}
-    if isinstance(df, pa.Table):
-        expected = pa.table(expected_data)
-    else:
-        expected = df.__class__(expected_data)
-
-    new_df = _set_cell(df, 1, "col2", "x")
-    assert_frame_equal(new_df, expected)
 
 
 def test_reorder(df: DataFrameLike):
