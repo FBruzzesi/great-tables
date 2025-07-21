@@ -172,15 +172,6 @@ def _get_cell(data: IntoDataFrame, row: int, column: str) -> Any:
     return nw.from_native(data, eager_only=True).item(row=row, column=column)
 
 
-# _set_cell ----
-
-
-def _set_cell(data: IntoDataFrameT, row: int, column: str, value: Any) -> IntoDataFrameT:
-    frame = nw.from_native(data, eager_only=True)
-    new_col = frame.get_column(column).scatter(row, value)
-    return frame.with_columns(**{column: new_col}).to_native()
-
-
 # _get_column_dtype ----
 
 
