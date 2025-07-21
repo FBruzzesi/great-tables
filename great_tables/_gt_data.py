@@ -103,9 +103,7 @@ class GTData:
         locale: str | None = None,
     ):
         data = validate_frame(data)
-        data_nw: nw.DataFrame[Any] = nw.from_native(
-            data, eager_only=True, allow_series=False, strict=True
-        )
+        data_nw: nw.DataFrame[Any] = nw.from_native(data, eager_only=True, pass_through=False)
         stub, boxhead = _prep_gt(data_nw, rowname_col, groupname_col, auto_align)
 
         if id is not None:

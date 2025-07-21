@@ -4,12 +4,12 @@ import numpy as np
 import pandas as pd
 import polars as pl
 import pyarrow as pa
-import polars.testing
+import narwhals.stable.v1 as nw
 import pytest
 from great_tables import GT
 from great_tables._gt_data import FormatterSkipElement
 from great_tables._substitution import SubMissing, SubZero
-from great_tables._tbl_data import DataFrameLike, to_list
+from great_tables._tbl_data import DataFrameLike
 
 params_frames = [
     pytest.param(pd.DataFrame, id="pandas"),
@@ -40,7 +40,7 @@ def assert_frame_equal(src: DataFrameLike, target: DataFrameLike):
 def assert_series_equals(src, target: list):
     # polars is kind and converts its null type to None, but
     # pandas needs the NA -> None to be done manually.
-    fixed = [None if x is pd.NA else x for x in to_list(src)]
+    fixed = [None if x is pd.NA else x for x in nw.from_native(src, series_only=True).to_list()]
     assert fixed == target
 
 

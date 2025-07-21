@@ -22,6 +22,7 @@ from typing import (
 
 import babel
 import faicons
+import narwhals.stable.v1 as nw
 from babel.dates import format_date, format_datetime, format_time
 from typing_extensions import TypeAlias
 
@@ -39,10 +40,7 @@ from ._tbl_data import (
     DataFrameLike,
     PlExpr,
     SelectExpr,
-    _get_column_dtype,
     is_na,
-    is_series,
-    to_list,
 )
 from ._text import _md_html, escape_pattern_str_latex
 from ._utils import _str_detect, _str_replace, is_valid_http_schema
@@ -4941,8 +4939,8 @@ def fmt_nanoplot(
     # main ----
     # Get the internal data table
     data_tbl = self._tbl_data
-
-    column_d_type = _get_column_dtype(data_tbl, columns)
+    data_col = nw.from_native(data_tbl, eager_only=True).get_column(columns)
+    column_d_type = data_col.dtype
 
     col_class = str(column_d_type).lower()
 
@@ -4960,7 +4958,7 @@ def fmt_nanoplot(
     if plot_type in ["line", "bar"] and scalar_vals:
         # Check each cell in the column and get each of them that contains a scalar value
         # Why are we grabbing the first element of a tuple? (Note this also happens again below.)
-        all_single_y_vals = to_list(data_tbl[columns])
+        all_single_y_vals = data_col.to_list()
 
         autoscale = False
 
@@ -4981,7 +4979,7 @@ def fmt_nanoplot(
         # TODO: if a column of delimiter separated strings is passed. E.g. "1 2 3 4". Does this mean
         # that autoscale does not work? In this case, is col_i_y_vals_raw a string that gets processed?
         # downstream?
-        all_y_vals_raw = to_list(data_tbl[columns])
+        all_y_vals_raw = data_col.to_list()
 
         all_y_vals = []
 
@@ -5090,8 +5088,8 @@ def _generate_data_vals(
         list[Any]: A list of data values.
     """
 
-    if is_series(data_vals):
-        data_vals = to_list(data_vals)
+    if nw.dependencies.is_into_series(data_vals):
+        data_vals = nw.from_native(data_vals, series_only=True).to_list()
 
     if isinstance(data_vals, list):
         # If the list contains string values, determine whether they are date values
