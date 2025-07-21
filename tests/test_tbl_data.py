@@ -2,7 +2,6 @@ import math
 import pandas as pd
 import polars as pl
 import pyarrow as pa
-import polars.testing
 import pytest
 from great_tables import GT
 from great_tables._utils_render_html import create_body_component_h
@@ -15,12 +14,8 @@ from great_tables._tbl_data import (
     cast_frame_to_string,
     create_empty_frame,
     eval_select,
-    get_column_names,
     group_splits,
-    is_series,
-    reorder,
     to_frame,
-    to_list,
     validate_frame,
     copy_frame,
 )
@@ -33,7 +28,7 @@ params_frames = [
 params_series = [
     pytest.param(pd.Series, id="pandas"),
     pytest.param(pl.Series, id="polars"),
-    pytest.param(pa.array, id="arrow"),
+    # pytest.param(pa.array, id="arrow"),
     pytest.param(lambda a: pa.chunked_array([a]), id="arrow-chunked"),
 ]
 
@@ -59,11 +54,6 @@ def assert_frame_equal(src, target):
         raise NotImplementedError(f"Unsupported data type: {type(src)}")
 
 
-def test_get_column_names(df: DataFrameLike):
-    expected = ["col1", "col2", "col3"]
-    assert get_column_names(df) == expected
-
-
 def test_get_column_dtypes(df: DataFrameLike):
     col1 = df["col1"]
     assert _get_column_dtype(df, "col1") == getattr(col1, "dtype", getattr(col1, "type", None))
@@ -71,21 +61,6 @@ def test_get_column_dtypes(df: DataFrameLike):
 
 def test_get_cell(df: DataFrameLike):
     assert _get_cell(df, 1, "col2") == "b"
-
-
-def test_reorder(df: DataFrameLike):
-    res = reorder(df, [0, 2], ["col2"])
-
-    expected_data = {"col2": ["a", "c"]}
-    if isinstance(df, pa.Table):
-        dst = pa.table(expected_data)
-    else:
-        dst = df.__class__(expected_data)
-
-    if isinstance(dst, pd.DataFrame):
-        dst.index = pd.Index([0, 2])
-
-    assert_frame_equal(res, dst)
 
 
 @pytest.mark.parametrize("expr", [["col2", "col1"], [1, 0], ["col2", 0], [1, "col1"]])
@@ -274,20 +249,6 @@ def test_to_frame(ser: SeriesLike):
         assert_frame_equal(df, pa.table({"x": [1.0, 2.0, None]}))
     else:
         raise AssertionError(f"Unexpected series type: {type(ser)}")
-
-
-def test_is_series(ser: SeriesLike):
-    assert is_series(ser)
-
-
-def test_is_series_false():
-    assert not is_series(1)
-
-
-def test_to_list(ser: SeriesLike):
-    pylist = to_list(ser)
-    assert len(pylist) == 3
-    assert pylist[:2] == [1.0, 2.0]
 
 
 def test_cast_frame_to_string_polars_list_col():

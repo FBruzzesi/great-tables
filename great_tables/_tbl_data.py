@@ -148,22 +148,6 @@ def copy_frame(df: IntoDataFrameT) -> IntoDataFrameT:
     return nw.from_native(df, eager_only=True).clone().to_native()
 
 
-# get_column_names ----
-
-
-def get_column_names(data: IntoDataFrame) -> list[str]:
-    """Get a list of column names from the input data table"""
-    return nw.from_native(data, eager_only=True).columns
-
-
-# n_rows ----
-
-
-def n_rows(data: IntoDataFrame) -> int:
-    """Get the number of rows from the input data table"""
-    return len(nw.from_native(data, eager_only=True))
-
-
 # _get_cell ----
 
 
@@ -184,12 +168,6 @@ def _get_column_dtype(data: DataFrameLike, column: str) -> Any:
 @_get_column_dtype.register(PyArrowTable)
 def _(data: PyArrowTable, column: str) -> Any:
     return data.column(column).type
-
-
-# reorder ----
-def reorder(data: IntoDataFrameT, rows: list[int], columns: list[str]) -> IntoDataFrameT:
-    """Return a re-ordered DataFrame."""
-    return nw.from_native(data, eager_only=True)[rows, columns].to_native()
 
 
 # group_splits ----
@@ -423,17 +401,6 @@ def replace_null_frame(df: IntoDataFrameT, replacement: IntoDataFrameT) -> IntoD
     replacement_nw = nw.from_native(replacement, eager_only=True)
     exprs = (df_nw[name].fill_null(replacement_nw[name]).alias(name) for name in df_nw.columns)
     return df_nw.select(*exprs).to_native()
-
-
-def to_list(ser: IntoSeries) -> list[Any]:
-    return nw.from_native(ser, series_only=True).to_list()
-
-
-# is_series ----
-
-
-def is_series(ser: Any) -> bool:
-    return nw.dependencies.is_into_series(ser)
 
 
 # mutate ----
