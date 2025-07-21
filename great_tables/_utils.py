@@ -7,12 +7,13 @@ from collections.abc import Generator, Set
 from types import ModuleType
 from typing import TYPE_CHECKING, Any, Iterable, Iterator
 
-from ._tbl_data import _get_cell, _set_cell, get_column_names, n_rows
+import narwhals.stable.v1 as nw
+from narwhals.typing import IntoDataFrame
+
 from ._text import BaseText, _process_text
 
 if TYPE_CHECKING:
     from ._gt_data import FormatInfo, GTData
-    from ._tbl_data import TblData
 
 
 def _try_import(name: str, pip_install_line: str | None = None) -> ModuleType:
@@ -232,7 +233,10 @@ def _flatten_list(x: Any) -> list[Any]:
 # yet since that would result in a circular import. This will be fixed in the future (when HTML
 # escaping is implemented).
 def _migrate_unformatted_to_output(
-    data: GTData, data_tbl: TblData, formats: list[FormatInfo], context: str
+    data: GTData,
+    data_tbl: nw.DataFrame[Any] | IntoDataFrame,
+    formats: list[FormatInfo],
+    context: str,
 ) -> GTData:
     """
     Escape unformatted cells so they are safe for a specific output context.
@@ -257,30 +261,40 @@ def _migrate_unformatted_to_output(
     deduplicate_formatted_cells = list(set(_flatten_list(all_formatted_cells)))
 
     # Get all visible cells in the table
-    all_visible_cells = _get_visible_cells(data=data_tbl)
+    data_tbl_nw = nw.from_native(data_tbl, eager_only=True, pass_through=False)
+    all_visible_cells = _get_visible_cells(data=data_tbl_nw)
 
     # Get the difference between the visible cells and the formatted cells
     all_unformatted_cells = list(set(all_visible_cells) - set(deduplicate_formatted_cells))
 
     # TODO: this currently will only be used for LaTeX (HTML escaping will be performed
     # in the future)
+    remap: dict[str, dict[str, list[Any]]] = {}
 
     for col, row in all_unformatted_cells:
         # Get the cell value and cast as string
-        cell_value = _get_cell(data_tbl, row, col)
+        cell_value = data_tbl_nw.item(row=row, column=col)
         cell_value_str = str(cell_value)
 
         result = _process_text(cell_value_str, context=context)
 
-        data._body.body = _set_cell(data._body.body, row, col, result)
+        if col in remap:
+            remap[col]["indices"].append(row)
+            remap[col]["values"].append(result)
+        else:
+            remap[col] = {"indices": [row], "values": [result]}
+
+    _body = data._body._body
+    new_cols = {c: _body.get_column(c).scatter(**kwargs) for c, kwargs in remap.items()}
+    data._body.body = _body.with_columns(**new_cols)
 
     return data
 
 
 # Get a list of tuples for all visible cells in the table
 # Define the type of `data` as `TblData` when doing so won't result in a circular import
-def _get_visible_cells(data: TblData) -> list[tuple[str, int]]:
-    return [(col, row) for col in get_column_names(data) for row in range(n_rows(data))]
+def _get_visible_cells(data: nw.DataFrame[Any]) -> list[tuple[str, int]]:
+    return [(col, row) for col in data.columns for row in range(len(data))]
 
 
 def is_valid_http_schema(url: str) -> bool:
