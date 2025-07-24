@@ -9,7 +9,6 @@ from great_tables._tbl_data import (
     DataFrameLike,
     SeriesLike,
     _get_cell,
-    _get_column_dtype,
     _validate_selector_list,
     cast_frame_to_string,
     create_empty_frame,
@@ -52,11 +51,6 @@ def assert_frame_equal(src, target):
         assert src.equals(target)
     else:
         raise NotImplementedError(f"Unsupported data type: {type(src)}")
-
-
-def test_get_column_dtypes(df: DataFrameLike):
-    col1 = df["col1"]
-    assert _get_column_dtype(df, "col1") == getattr(col1, "dtype", getattr(col1, "type", None))
 
 
 def test_get_cell(df: DataFrameLike):

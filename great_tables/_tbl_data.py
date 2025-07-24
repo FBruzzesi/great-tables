@@ -156,20 +156,6 @@ def _get_cell(data: IntoDataFrame, row: int, column: str) -> Any:
     return nw.from_native(data, eager_only=True).item(row=row, column=column)
 
 
-# _get_column_dtype ----
-
-
-@singledispatch
-def _get_column_dtype(data: DataFrameLike, column: str) -> Any:
-    """Get the data type for a single column in the input data table"""
-    return data[column].dtype
-
-
-@_get_column_dtype.register(PyArrowTable)
-def _(data: PyArrowTable, column: str) -> Any:
-    return data.column(column).type
-
-
 # group_splits ----
 def group_splits(data: IntoDataFrame, group_key: str) -> dict[str | int, list[int]]:
     frame = nw.from_native(data, eager_only=True)
