@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import copy
 from collections.abc import Sequence
-from contextlib import suppress
 from dataclasses import dataclass, field, replace
 from enum import Enum, auto
 from typing import TYPE_CHECKING, Any, Callable, Literal, Protocol, TypeVar, overload
@@ -374,39 +373,35 @@ class Boxhead(_Sequence[ColInfo]):
         if any(col_info.var != col_name for col_info, col_name in zip(self._d, col_names)):
             raise ValueError("Column names must match between data and Boxhead")
 
-        # Obtain a list of column classes for each of the column names by iterating
-        # through each of the columns and obtaining the type of the column from
-        # a Pandas DataFrame or a Polars DataFrame
-        col_classes: list[nw.dtypes.DType] = []
+        # Obtain a list of where to align each column based on the column dtype
+        # Rules are as follows:
+        #   * int, uint, float, date, datetime -> "right"
+        #   * string or object with just nulls -> "right"
+        #   * string that match the numeric_like_pattern -> "right"
+        #   * remaining string and object -> "left"
+        #   * every other type -> "center"
         schema = data_nw.collect_schema()
-        impl_is_pandas_like = data_nw.implementation.is_pandas_like()
-
         numeric_like_pattern = "^[0-9 -/:\\.]*$"
+        align: list[Literal["left", "center", "right"]] = []
+
         for col_name, col_dtype in schema.items():
-            if isinstance(col_dtype, nw.Object) or (
-                impl_is_pandas_like and isinstance(col_dtype, nw.String)
-            ):
-                # Check whether all values in 'object' columns are strings that
-                # for all intents and purpose are 'number-like'
-                series = data_nw.get_column(col_name)
-                non_null_series = series.filter(~series.is_null())
-                with suppress(Exception):
-                    if len(non_null_series) == 0 or (
-                        non_null_series.str.contains(numeric_like_pattern).all()
-                    ):
-                        col_dtype = nw.Float64()
-
-            col_classes.append(col_dtype)
-
-        # Get a list of `align` values by translating the column classes
-        align: list[str] = []
-        for col_class in col_classes:
-            # Translate the column classes to an alignment value of 'left', 'right', or 'center'
-            if (col_class.is_numeric() and not isinstance(col_class, nw.Decimal)) or isinstance(
-                col_class, (nw.Datetime, nw.Date)
+            series = data_nw.get_column(col_name)
+            non_null_series = series.filter(~series.is_null())
+            if (
+                (col_dtype.is_numeric() and not isinstance(col_dtype, nw.Decimal))
+                or isinstance(col_dtype, (nw.Datetime, nw.Date))
+                or (len(non_null_series) == 0 and isinstance(col_dtype, (nw.String, nw.Object)))
             ):
                 align.append("right")
-            elif isinstance(col_class, (nw.Object, nw.String)):
+
+            elif isinstance(col_dtype, nw.String):
+                # Check whether all values in 'object' columns are strings that
+                # for all intents and purpose are 'number-like'
+                if non_null_series.str.contains(numeric_like_pattern).all():
+                    align.append("right")
+                else:
+                    align.append("left")
+            elif isinstance(col_dtype, nw.Object):
                 align.append("left")
             else:
                 align.append("center")
