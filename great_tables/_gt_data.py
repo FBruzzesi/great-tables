@@ -381,15 +381,20 @@ class Boxhead(_Sequence[ColInfo]):
         schema = data_nw.collect_schema()
         impl_is_pandas_like = data_nw.implementation.is_pandas_like()
 
+        numeric_like_pattern = "^[0-9 -/:\\.]*$"
         for col_name, col_dtype in schema.items():
-            if impl_is_pandas_like and isinstance(col_dtype, (nw.Object, nw.String, nw.Unknown)):
+            if isinstance(col_dtype, nw.Object) or (
+                impl_is_pandas_like and isinstance(col_dtype, nw.String)
+            ):
                 # Check whether all values in 'object' columns are strings that
                 # for all intents and purpose are 'number-like'
                 series = data_nw.get_column(col_name)
                 non_null_series = series.filter(~series.is_null())
                 with suppress(Exception):
-                    non_null_series.cast(nw.Float64())
-                    col_dtype = nw.Float64()
+                    if len(non_null_series) == 0 or (
+                        non_null_series.str.contains(numeric_like_pattern).all()
+                    ):
+                        col_dtype = nw.Float64()
 
             col_classes.append(col_dtype)
 
