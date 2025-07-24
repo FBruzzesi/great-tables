@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import copy
-import re
 from collections.abc import Sequence
+from contextlib import suppress
 from dataclasses import dataclass, field, replace
 from enum import Enum, auto
 from typing import TYPE_CHECKING, Any, Callable, Literal, Protocol, TypeVar, overload
@@ -19,13 +19,12 @@ from ._tbl_data import (
     Agnostic,
     DataFrameLike,
     TblData,
-    _get_column_dtype,
     copy_frame,
     create_empty_frame,
     validate_frame,
 )
 from ._text import BaseText
-from ._utils import OrderedSet, _str_detect
+from ._utils import OrderedSet
 
 if TYPE_CHECKING:
     from ._helpers import UnitStr
@@ -378,62 +377,32 @@ class Boxhead(_Sequence[ColInfo]):
         # Obtain a list of column classes for each of the column names by iterating
         # through each of the columns and obtaining the type of the column from
         # a Pandas DataFrame or a Polars DataFrame
-        col_classes = []
-        data_native = data_nw.to_native()
-        for col in col_names:
-            dtype = _get_column_dtype(data_native, col)
+        col_classes: list[nw.dtypes.DType] = []
+        schema = data_nw.collect_schema()
+        impl_is_pandas_like = data_nw.implementation.is_pandas_like()
 
-            if dtype == "object":
+        for col_name, col_dtype in schema.items():
+            if impl_is_pandas_like and isinstance(col_dtype, (nw.Object, nw.String, nw.Unknown)):
                 # Check whether all values in 'object' columns are strings that
                 # for all intents and purpose are 'number-like'
+                series = data_nw.get_column(col_name)
+                non_null_series = series.filter(~series.is_null())
+                with suppress(Exception):
+                    non_null_series.cast(nw.Float64())
+                    col_dtype = nw.Float64()
 
-                col_vals = data_nw.get_column(col).to_list()
-
-                # Detect whether all non-NA values in the column are 'number-like'
-                # through use of a regular expression
-                number_like_matches = []
-
-                for val in col_vals:
-                    if isinstance(val, str):
-                        number_like_matches.append(re.match("^[0-9 -/:\\.]*$", val))
-
-                # If all values in the column are 'number-like', then set the
-                # dtype to 'character-numeric'
-                if all(number_like_matches):
-                    dtype = "character-numeric"
-
-            col_classes.append(dtype)
+            col_classes.append(col_dtype)
 
         # Get a list of `align` values by translating the column classes
         align: list[str] = []
-
         for col_class in col_classes:
-            # Ensure that `col_class` is lowercase
-            col_class = str(col_class).lower()
-
             # Translate the column classes to an alignment value of 'left', 'right', or 'center'
-            if col_class == "character-numeric":
-                align.append("right")
-            elif col_class == "object":
-                align.append("left")
-            elif col_class == "utf8":
-                align.append("left")
-            elif col_class == "string":
-                align.append("left")
-            elif (
-                _str_detect(col_class, "int")
-                or _str_detect(col_class, "uint")
-                or _str_detect(col_class, "float")
+            if (col_class.is_numeric() and not isinstance(col_class, nw.Decimal)) or isinstance(
+                col_class, (nw.Datetime, nw.Date)
             ):
                 align.append("right")
-            elif _str_detect(col_class, "date"):
-                align.append("right")
-            elif _str_detect(col_class, "bool"):
-                align.append("center")
-            elif col_class == "factor":
-                align.append("center")
-            elif col_class == "list":
-                align.append("center")
+            elif isinstance(col_class, (nw.Object, nw.String)):
+                align.append("left")
             else:
                 align.append("center")
 
