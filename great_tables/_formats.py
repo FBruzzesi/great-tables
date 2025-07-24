@@ -4920,8 +4920,6 @@ def fmt_nanoplot(
     ```
     """
 
-    from great_tables._utils import _str_detect
-
     # guards ----
 
     if not isinstance(columns, str):
@@ -4940,18 +4938,8 @@ def fmt_nanoplot(
     # Get the internal data table
     data_tbl = self._tbl_data
     data_col = nw.from_native(data_tbl, eager_only=True).get_column(columns)
-    column_d_type = data_col.dtype
-
-    col_class = str(column_d_type).lower()
-
-    if (
-        _str_detect(col_class, "int")
-        or _str_detect(col_class, "uint")
-        or _str_detect(col_class, "float")
-    ):
-        scalar_vals = True
-    else:
-        scalar_vals = False
+    col_dtype = data_col.dtype
+    scalar_vals = col_dtype.is_numeric() and not isinstance(col_dtype, nw.Decimal)
 
     # If a bar plot is requested and the data consists of single y values, then we need to
     # obtain a list of all single y values in the targeted column (from `columns`)
