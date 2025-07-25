@@ -4,6 +4,7 @@ import copy
 from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from enum import Enum, auto
+from itertools import zip_longest
 from typing import TYPE_CHECKING, Any, Callable, Literal, Protocol, TypeVar, overload
 
 import narwhals.stable.v1 as nw
@@ -612,19 +613,13 @@ class Stub:
         _n_rows = len(data_nw)
         row_indices = range(_n_rows)
 
-        if groupname_col is not None:
-            group_id = data_nw.get_column(groupname_col).to_list()
-        else:
-            group_id = [None] * _n_rows
-
-        if rowname_col is not None:
-            row_names = data_nw.get_column(rowname_col).to_list()
-        else:
-            row_names = [None] * _n_rows
+        # Narwhals Series is iterable, it does not require to converting to list
+        group_id = data_nw.get_column(groupname_col) if groupname_col is not None else ()
+        row_names = data_nw.get_column(rowname_col) if rowname_col is not None else ()
 
         # Obtain the column names from the data and initialize the
         # `_stub` from that
-        row_info = [RowInfo(*i) for i in zip(row_indices, group_id, row_names)]
+        row_info = [RowInfo(*i) for i in zip_longest(row_indices, group_id, row_names)]
 
         # create groups, and ensure they're ordered by first observed
         group_names = OrderedSet(

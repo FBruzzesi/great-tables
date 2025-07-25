@@ -461,5 +461,7 @@ def _get_column_labels(gt: GT, context: str) -> list[str | BaseText | None]:
 def _get_column_of_values(gt: GT, column_name: str, context: str) -> list[str]:
     gt_built = gt._build_data(context=context)
     tbl_data = nw.from_native(gt_built._body.body, eager_only=True)
-    cell_values: list[str] = [str(x) for x in tbl_data.get_column(column_name).to_list()]
+    cell_values: list[str] = (
+        tbl_data.get_column(column_name).cast(nw.String()).fill_null("None").to_list()
+    )
     return cell_values
