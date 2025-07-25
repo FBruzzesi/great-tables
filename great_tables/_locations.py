@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from functools import singledispatch
 from typing import TYPE_CHECKING, Any, Callable, Literal
 
+import narwhals.stable.v1 as nw
 from typing_extensions import TypeAlias
 
 # note that types like Spanners are only used in annotations for concretes of the
@@ -803,17 +804,16 @@ def resolve_rows_i(
     elif isinstance(expr, PlExpr):
         # TODO: decide later on the name supplied to `name`
         # with_row_index supercedes with_row_count
-        frame: PlDataFrame = data._tbl_data
-        meth_row_number = getattr(frame, "with_row_index", None)
-        if not meth_row_number:
-            meth_row_number = frame.with_row_count
-
-        result = meth_row_number(name="__row_number__").filter(expr)
+        tbl: PlDataFrame = data._tbl_data
+        frame: PlDataFrame = (
+            nw.from_native(tbl, eager_only=True).with_row_index("__row_number__").to_native()
+        )
+        result = frame.filter(expr)
         return [(row_names[ii], ii) for ii in result["__row_number__"]]
 
     elif callable(expr):
-        res: "list[bool]" = eval_transform(data._tbl_data, expr)
-        if not all(map(lambda x: isinstance(x, bool), res)):
+        res: nw.Series[Any] = nw.from_native(eval_transform(data._tbl_data, expr), series_only=True)
+        if res.dtype != nw.Boolean:
             raise ValueError(
                 "If you select rows using a callable, it must take a DataFrame, "
                 "and return a boolean Series."

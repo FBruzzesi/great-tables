@@ -187,22 +187,24 @@ def eval_select(data: DataFrameLike, expr: SelectExpr, strict: bool = True) -> _
     raise NotImplementedError(f"Unsupported type: {type(expr)}")
 
 
-@eval_select.register
+@eval_select.register(PdDataFrame)
+@eval_select.register(PyArrowTable)
 def _(
-    data: PdDataFrame,
+    data: "PdDataFrame | PyArrowTable",
     expr: Union[list[Union[str, int]], Callable[[str], bool]],
     strict: bool = True,
 ) -> _NamePos:
     if isinstance(expr, (str, int)):
         expr = [expr]
 
+    col_names = nw.from_native(data, eager_only=True, pass_through=False).columns
     if isinstance(expr, list):
-        return _eval_select_from_list(list(data.columns), expr)
+        return _eval_select_from_list(col_names, expr)
     elif callable(expr):
         # TODO: currently, we call on each string, but we could be calling on
         # pd.DataFrame.columns instead (which would let us use pandas .str methods)
-        col_pos = {k: ii for ii, k in enumerate(list(data.columns))}
-        return [(col, col_pos[col]) for col in data.columns if expr(col)]
+        col_pos = {k: ii for ii, k in enumerate(col_names)}
+        return [(col, col_pos[col]) for col in col_names if expr(col)]
 
     raise NotImplementedError(f"Unsupported selection expr: {expr}")
 
@@ -255,22 +257,6 @@ def _(data: PlDataFrame, expr: Union[list[str], _selector_proxy_], strict: bool 
 
     # I don't think there's a way to get the columns w/o running the selection
     return [(col, col_pos[col]) for col in final_columns]
-
-
-@eval_select.register
-def _(
-    data: PyArrowTable, expr: Union[list[str], _selector_proxy_], strict: bool = True
-) -> _NamePos:
-    if isinstance(expr, (str, int)):
-        expr = [expr]
-
-    if isinstance(expr, list):
-        return _eval_select_from_list(data.column_names, expr)
-    elif callable(expr):
-        col_pos = {k: ii for ii, k in enumerate(data.column_names)}
-        return [(col, col_pos[col]) for col in data.column_names if expr(col)]
-
-    raise NotImplementedError(f"Unsupported selection expr: {expr}")
 
 
 def _validate_selector_list(selectors: list, strict=True):
@@ -393,12 +379,12 @@ def replace_null_frame(df: IntoDataFrameT, replacement: IntoDataFrameT) -> IntoD
 
 
 @singledispatch
-def eval_transform(df: DataFrameLike, expr: Any) -> list[Any]:
+def eval_transform(df: DataFrameLike, expr: Any) -> SeriesLike:
     raise NotImplementedError(f"Unsupported type: {type(df)}")
 
 
 @eval_transform.register
-def _(df: PdDataFrame, expr: Callable[[PdDataFrame], PdSeries]) -> list[Any]:
+def _(df: PdDataFrame, expr: Callable[[PdDataFrame], PdSeries]) -> PdSeries:
     res = expr(df)
 
     if not isinstance(res, PdSeries):
@@ -409,11 +395,11 @@ def _(df: PdDataFrame, expr: Callable[[PdDataFrame], PdSeries]) -> list[Any]:
             f"\n\nInput data: {len(df)}.\nResult: {len(res)}."
         )
 
-    return res.to_list()
+    return res
 
 
 @eval_transform.register
-def _(df: PlDataFrame, expr: PlExpr) -> list[Any]:
+def _(df: PlDataFrame, expr: PlExpr) -> PlSeries:
     df_res = df.select(expr)
 
     if len(df_res.columns) > 1:
@@ -429,11 +415,11 @@ def _(df: PlDataFrame, expr: PlExpr) -> list[Any]:
             f"\n\nInput data: {len(df)}.\nResult: {len(res)}."
         )
 
-    return res.to_list()
+    return res
 
 
 @eval_transform.register
-def _(df: PyArrowTable, expr: Callable[[PyArrowTable], PyArrowArray]) -> list[Any]:
+def _(df: PyArrowTable, expr: Callable[[PyArrowTable], PyArrowArray]) -> PyArrowArray:
     res = expr(df)
 
     if not isinstance(res, PyArrowArray):
@@ -444,7 +430,7 @@ def _(df: PyArrowTable, expr: Callable[[PyArrowTable], PyArrowArray]) -> list[An
             f"\n\nInput data: {df.num_rows}.\nResult: {len(res)}."
         )
 
-    return res.to_pylist()
+    return res
 
 
 @singledispatch
