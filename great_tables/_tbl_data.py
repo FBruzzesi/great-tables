@@ -5,7 +5,7 @@ import warnings
 from functools import singledispatch
 from typing import TYPE_CHECKING, Any, Callable, Optional, Union
 
-import narwhals.stable.v1 as nw
+import narwhals.stable.v2 as nw
 from narwhals.typing import IntoDataFrame, IntoDataFrameT, IntoSeries
 from typing_extensions import TypeAlias
 

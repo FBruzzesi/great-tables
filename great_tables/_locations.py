@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from functools import singledispatch
 from typing import TYPE_CHECKING, Any, Callable, Literal
 
-import narwhals.stable.v1 as nw
+import narwhals.stable.v2 as nw
 from typing_extensions import TypeAlias
 
 # note that types like Spanners are only used in annotations for concretes of the

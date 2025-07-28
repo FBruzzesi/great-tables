@@ -7,7 +7,7 @@ from collections.abc import Generator, Set
 from types import ModuleType
 from typing import TYPE_CHECKING, Any, Iterable, Iterator
 
-import narwhals.stable.v1 as nw
+import narwhals.stable.v2 as nw
 from narwhals.typing import IntoDataFrame
 
 from ._text import BaseText, _process_text

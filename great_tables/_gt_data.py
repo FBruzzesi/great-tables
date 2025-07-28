@@ -7,7 +7,7 @@ from enum import Enum, auto
 from itertools import zip_longest
 from typing import TYPE_CHECKING, Any, Callable, Literal, Protocol, TypeVar, overload
 
-import narwhals.stable.v1 as nw
+import narwhals.stable.v2 as nw
 from narwhals.typing import IntoDataFrame
 from typing_extensions import Self, TypeAlias, Union
 

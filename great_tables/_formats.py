@@ -22,7 +22,7 @@ from typing import (
 
 import babel
 import faicons
-import narwhals.stable.v1 as nw
+import narwhals.stable.v2 as nw
 from babel.dates import format_date, format_datetime, format_time
 from typing_extensions import TypeAlias
 

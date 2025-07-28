@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import polars as pl
 import pyarrow as pa
-import narwhals.stable.v1 as nw
+import narwhals.stable.v2 as nw
 import pytest
 from great_tables import GT
 from great_tables._gt_data import FormatterSkipElement

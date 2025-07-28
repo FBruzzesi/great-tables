@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-import narwhals.stable.v1 as nw
+import narwhals.stable.v2 as nw
 from typing_extensions import Self
 
 # Main gt imports ----
