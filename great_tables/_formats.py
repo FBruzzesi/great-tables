@@ -2937,7 +2937,7 @@ def _value_to_engineering_notation(value: int | float, n_sigfig: int, exp_style:
 
     is_negative, sig_digits, dot_power, ten_power = _get_sci_parts(value, n_sigfig)
 
-    eng_power = int(3 * math.floor(ten_power / 3))
+    eng_power = 3 * math.floor(ten_power / 3)
     eng_dot = dot_power + ten_power - eng_power
 
     result = (
@@ -3138,7 +3138,7 @@ def _get_number_profile(value: int | float, n_sigfig: int) -> tuple[str, int, bo
     value = abs(value)
 
     if value == 0:
-        sig_digits = str(("0" * n_sigfig))
+        sig_digits = "0" * n_sigfig
         power = -(1 - n_sigfig)
     else:
         power = -1 * math.floor(math.log10(value)) + n_sigfig - 1
@@ -3151,7 +3151,7 @@ def _get_number_profile(value: int | float, n_sigfig: int) -> tuple[str, int, bo
 
         sig_digits = str(int(round(value * 10.0**power)))
 
-    return sig_digits, int(-power), is_negative
+    return sig_digits, -power, is_negative
 
 
 def _get_sci_parts(value: int | float, n_sigfig: int) -> tuple[bool, str, int, int]:
@@ -3376,7 +3376,7 @@ def _get_locale_sep_mark(default: str, use_seps: bool, locale: str | None = None
 
     # Replace any `""` or "\u00a0" with `" "` since an empty string actually
     # signifies a space character, and, we want to normalize to a simple space
-    sep_mark = " " if sep_mark == "" or sep_mark == "\u00a0" else sep_mark
+    sep_mark = " " if sep_mark in {"", "\u00a0"} else sep_mark
 
     return sep_mark
 
@@ -3674,7 +3674,7 @@ def _get_currency_exponent(currency: str) -> int:
 
     else:
         # TODO: in what situation are we given a currency code with no match?
-        # why return this? E.g. what if someone mispelled a currency code?
+        # why return this? E.g. what if someone misspelled a currency code?
         exponent = 2
 
     return exponent
@@ -3779,7 +3779,7 @@ def _validate_case(case: str) -> None:
     Raises:
         ValueError: If the case argument is not 'upper' or 'lower'.
     """
-    if case not in ["upper", "lower"]:
+    if case not in ("upper", "lower"):
         raise ValueError(f"The `case` argument must be either 'upper' or 'lower' (not '{case}').")
 
 
@@ -4442,7 +4442,7 @@ class FmtIcon:
         if self.stroke_width is None:
             stroke_width = "1px"
         elif isinstance(self.stroke_width, (int, float)):
-            stroke_width = f"{str(self.stroke_width)}px"
+            stroke_width = f"{self.stroke_width}px"
         else:
             stroke_width = self.stroke_width
 
@@ -4638,7 +4638,7 @@ class FmtFlag:
 
         for flag in flag_list:
             # If the number of characters in the country code is not 2 or 3, then we raise an error
-            if len(flag) not in [2, 3]:
+            if len(flag) not in (2, 3):
                 raise ValueError("The country code provided must be either 2 or 3 characters long.")
 
             # Since we allow 2- or 3- character country codes, create the name of the lookup
@@ -4928,7 +4928,7 @@ def fmt_nanoplot(
             f"\n\nReceived: {columns}"
         )
 
-    if plot_type not in ["line", "bar"]:
+    if plot_type not in ("line", "bar"):
         raise NotImplementedError(
             "Currently, fmt_nanoplot() only support line or bar as plot_type"
             f"\n\n Received: {plot_type}"
@@ -4943,7 +4943,7 @@ def fmt_nanoplot(
 
     # If a bar plot is requested and the data consists of single y values, then we need to
     # obtain a list of all single y values in the targeted column (from `columns`)
-    if plot_type in ["line", "bar"] and scalar_vals:
+    if plot_type in ("line", "bar") and scalar_vals:
         # Check each cell in the column and get each of them that contains a scalar value
         # Why are we grabbing the first element of a tuple? (Note this also happens again below.)
         all_single_y_vals = data_col.to_list()
@@ -4971,7 +4971,7 @@ def fmt_nanoplot(
 
         all_y_vals = []
 
-        for i, data_vals_i in enumerate(all_y_vals_raw):
+        for data_vals_i in all_y_vals_raw:
             # TODO: this dictionary handling seems redundant with _generate_data_vals dict handling?
             # Can this if-clause be removed?
             if isinstance(data_vals_i, dict):
