@@ -1,0 +1,172 @@
+# Interactive Tables
+
+**Great Tables** can render a fully interactive table (with sorting, searching, filtering, and pagination) by calling `opt_interactive()`. The result is an HTML widget powered by [reactable](https://glin.github.io/reactable/) that works in Jupyter notebooks, Quarto documents, and any HTML output. The widget loads React from a CDN, so viewing it requires an internet connection.
+
+Interactive tables are ideal for exploratory contexts where the reader needs to find specific values in a larger dataset (e.g., dashboards, internal tools, or notebook-based analysis). Sorting and filtering let readers answer their own questions about the data without you having to anticipate every view. For static outputs like PDF reports, printed documents, or email, stick with static tables since the interactivity features won't be functional in those formats.
+
+## Enabling interactivity
+
+A single call to `opt_interactive()` switches the table from static to interactive. The formatting methods continue to work exactly as before.
+
+``` python
+from great_tables import GT
+from great_tables.data import gtcars
+import polars as pl
+
+gtcars_pl = pl.from_pandas(gtcars).select(["mfr", "model", "year", "hp", "trq", "msrp"])
+
+(
+    GT(gtcars_pl)
+    .tab_header(title="GT Cars", subtitle="The full dataset, interactively")
+    .cols_label(mfr="Make", model="Model", year="Year", hp="HP", trq="Torque", msrp="MSRP")
+    .fmt_integer(columns=["year", "hp", "trq"], use_seps=False)
+    .fmt_currency(columns="msrp")
+    .opt_interactive()
+)
+```
+
+GT Cars
+
+The full dataset, interactively
+
+Click on any column header to sort. The table is paginated by default with 10 rows per page.
+
+You don't need to rebuild your table or learn a separate API. Instead, just append `.opt_interactive()` to the end of your method chain and the table gains sorting and pagination. The header (from [tab_header()](../reference/GT.tab_header.md#great_tables.GT.tab_header)), source notes, and column labels are kept, but some parts of a static table aren't shown in interactive mode yet: column spanners, the stub and row groups, footnotes, and summary rows.
+
+## Search and per-column filters
+
+Pass `use_search=True` to add a global search box, and `use_filters=True` to add a per-column text filter row beneath the headers.
+
+``` python
+from great_tables import GT
+from great_tables.data import gtcars
+import polars as pl
+
+(
+    GT(gtcars_pl)
+    .tab_header(title="GT Cars: Search and Filter")
+    .cols_label(mfr="Make", model="Model", year="Year", hp="HP", trq="Torque", msrp="MSRP")
+    .fmt_integer(columns=["year", "hp", "trq"], use_seps=False)
+    .fmt_currency(columns="msrp")
+    .opt_interactive(use_search=True, use_filters=True)
+)
+```
+
+GT Cars: Search and Filter
+
+Try typing `"Audi"` in the `Make` filter or `"2017"` in the `Year` filter to narrow the results.
+
+## Pagination options
+
+Control the number of rows per page and let users choose from a list of sizes with `page_size_default=` and `page_size_values=`. The pagination style can also be changed with `pagination_type=` (`"numbers"`, `"simple"`, or `"full"`).
+
+``` python
+from great_tables import GT
+from great_tables.data import gtcars
+import polars as pl
+
+(
+    GT(gtcars_pl)
+    .tab_header(title="GT Cars: Pagination options")
+    .cols_label(mfr="Make", model="Model", year="Year", hp="HP", trq="Torque", msrp="MSRP")
+    .fmt_integer(columns=["year", "hp", "trq"], use_seps=False)
+    .fmt_currency(columns="msrp")
+    .opt_interactive(
+        use_page_size_select=True,
+        page_size_default=5,
+        page_size_values=[5, 10, 25, 50],
+        pagination_type="simple",
+    )
+)
+```
+
+GT Cars: Pagination options
+
+Set `use_pagination=False` to display the full table without paging. This is useful for smaller datasets.
+
+## Styling with [tab_style()](../reference/GT.tab_style.md#great_tables.GT.tab_style)
+
+The [tab_style()](../reference/GT.tab_style.md#great_tables.GT.tab_style) method works in interactive mode for [loc.body()](../reference/loc.body.md#great_tables.loc.body) and [loc.column_labels()](../reference/loc.column_labels.md#great_tables.loc.column_labels). Styles are applied row by row as reactable renders each page, so they follow the data when you sort or filter.
+
+``` python
+from great_tables import style, loc
+
+(
+    GT(gtcars_pl)
+    .tab_header(title="GT Cars: Targeted styles")
+    .cols_label(mfr="Make", model="Model", year="Year", hp="HP", trq="Torque", msrp="MSRP")
+    .fmt_integer(columns=["year", "hp", "trq"], use_seps=False)
+    .fmt_currency(columns="msrp")
+    .tab_style(
+        style=style.fill(color="#fff3cd"),
+        locations=loc.body(columns="hp", rows=pl.col("hp") > 500),
+    )
+    .tab_style(
+        style=[style.text(color="#c0392b", weight="bold")],
+        locations=loc.body(columns="msrp", rows=pl.col("msrp") > 200_000),
+    )
+    .tab_style(
+        style=[style.fill(color="#ddeeff"), style.text(weight="bold")],
+        locations=loc.column_labels(columns=["hp", "trq"]),
+    )
+    .opt_interactive(use_search=True, use_filters=True, page_size_default=10)
+)
+```
+
+GT Cars: Targeted styles
+
+From the output you might notice:
+
+- HP values over 500 are highlighted in amber
+- MSRP values over \$200,000 appear in bold red
+- the `HP` and `Torque` column headers have a blue-tinted background
+
+Sort by `HP` or `MSRP` to confirm that the styling moves with the data.
+
+## Colorizing with [data_color()](../reference/GT.data_color.md#great_tables.GT.data_color)
+
+The [data_color()](../reference/GT.data_color.md#great_tables.GT.data_color) method also works in interactive tables. It applies a continuous color scale to each cell based on the underlying value. Because [data_color()](../reference/GT.data_color.md#great_tables.GT.data_color) is implemented via [tab_style()](../reference/GT.tab_style.md#great_tables.GT.tab_style) internally, the colors follow the data when you sort or filter.
+
+``` python
+(
+    GT(gtcars_pl)
+    .tab_header(title="GT Cars: data_color()")
+    .cols_label(mfr="Make", model="Model", year="Year", hp="HP", trq="Torque", msrp="MSRP")
+    .fmt_integer(columns=["year", "hp", "trq"], use_seps=False)
+    .fmt_currency(columns="msrp")
+    .data_color(columns="hp",  palette=["#fff7ec", "#ef6c00"])
+    .data_color(columns="msrp", palette="Blues")
+    .opt_interactive(use_search=True, use_filters=True, page_size_default=10)
+)
+```
+
+GT Cars: data_color()
+
+Each column uses its own independent scale: orange for `HP` and blue for `MSRP`. The scales are computed from the full dataset, so a cell keeps its color when you filter by `Make`.
+
+### Multiple columns, shared scale
+
+Pass `domain=` to lock the color range across columns so they share a common scale.
+
+``` python
+(
+    GT(gtcars_pl)
+    .tab_header(
+        title="GT Cars: HP and Torque on a shared scale",
+        subtitle="Higher values are darker and both columns use the same domain",
+    )
+    .cols_label(mfr="Make", model="Model", year="Year", hp="HP", trq="Torque", msrp="MSRP")
+    .fmt_integer(columns=["year", "hp", "trq"], use_seps=False)
+    .fmt_currency(columns="msrp")
+    .data_color(
+        columns=["hp", "trq"],
+        palette=["#edf8fb", "#006d2c"],
+        domain=[200, 700],
+    )
+    .opt_interactive(use_search=True, page_size_default=10)
+)
+```
+
+GT Cars: HP and Torque on a shared scale
+
+Higher values are darker and both columns use the same domain

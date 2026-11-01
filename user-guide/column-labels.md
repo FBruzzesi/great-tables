@@ -1,0 +1,147 @@
+# Column Labels
+
+Column labels are the primary way readers identify what data each column contains. Raw DataFrame column names are often abbreviated, inconsistently cased, or full of underscores. Presentation-ready column labels are one of the highest-impact improvements you can make to a table, and they require very little effort.
+
+Beyond simple labels, **Great Tables** lets you group related columns together under spanner labels, reorder columns for clarity, and customize label text with rich formatting. This page walks through each of these capabilities.
+
+## Working with Column Data
+
+The table's **Column Labels** part contains, at a minimum, columns and their *column labels*. The last example had a single column: `population`. Just as in the **Stub**, we can create groupings called *spanner labels* that encompass one or more columns.
+
+To better demonstrate how **Column Labels** work and are displayed, let's use an input data table with more columns. In this case, that input table will be made from [gibraltar](../reference/data.gibraltar.md#great_tables.data.gibraltar), which has weather observations from the Gibraltar Airport Station. We'll keep these of its columns:
+
+- `temp`: the air temperature in degrees Celsius (°C)
+- `humidity`: the relative humidity, as a value between `0` and `1`
+- `wind_speed`: the wind speed in meters per second (m s−1)
+- `pressure`: the atmospheric pressure in hectopascals (hPa)
+- `date`, `time`: the date and time of the observation
+
+The date and time columns are placed last here, so that we can move them later on.
+
+``` python
+from great_tables import GT, html
+from great_tables.data import gibraltar
+
+gibraltar_mini = gibraltar.head(10)[["temp", "humidity", "wind_speed", "pressure", "date", "time"]]
+
+gibraltar_mini
+```
+
+|     | temp | humidity | wind_speed | pressure | date       | time  |
+|-----|------|----------|------------|----------|------------|-------|
+| 0   | 18.9 | 0.68     | 6.7        | 1015.2   | 2023-05-01 | 00:20 |
+| 1   | 18.9 | 0.73     | 7.2        | 1015.2   | 2023-05-01 | 00:50 |
+| 2   | 17.8 | 0.77     | 6.7        | 1014.6   | 2023-05-01 | 01:20 |
+| 3   | 18.9 | 0.73     | 6.7        | 1014.6   | 2023-05-01 | 01:50 |
+| 4   | 18.9 | 0.68     | 6.7        | 1014.6   | 2023-05-01 | 02:20 |
+| 5   | 17.8 | 0.73     | 6.7        | 1014.6   | 2023-05-01 | 02:50 |
+| 6   | 17.8 | 0.73     | 7.2        | 1014.6   | 2023-05-01 | 03:20 |
+| 7   | 17.8 | 0.73     | 6.3        | 1013.5   | 2023-05-01 | 03:50 |
+| 8   | 18.9 | 0.64     | 4.0        | 1014.6   | 2023-05-01 | 04:20 |
+| 9   | 18.9 | 0.64     | 3.1        | 1014.6   | 2023-05-01 | 04:50 |
+
+This ten-row subset of the Gibraltar weather dataset has both measurement and time columns, making it a good candidate for organizing with column spanners.
+
+## Adding Column Spanners
+
+Column spanners are most useful when you have a logical grouping of columns and want the reader to grasp the table's structure at a glance. For example, grouping all measurement columns under "Measurement" and all date-related columns under "Time" immediately communicates the two-part nature of the data. Spanners work especially well in wide tables where the column count might otherwise feel overwhelming.
+
+Let's organize the time information under a `Time` *spanner label*, and put the other columns under a `Measurement` *spanner label*. We can do this with the [tab_spanner()](../reference/GT.tab_spanner.md#great_tables.GT.tab_spanner) method.
+
+``` python
+gt_gibraltar = (
+    GT(gibraltar_mini)
+    .tab_header(
+        title="Weather at Gibraltar Airport",
+        subtitle="Observations from the early hours of May 1, 2023"
+    )
+    .tab_spanner(
+        label="Time",
+        columns=["date", "time"]
+    )
+    .tab_spanner(
+        label="Measurement",
+        columns=["temp", "humidity", "wind_speed", "pressure"]
+    )
+)
+
+gt_gibraltar
+```
+
+| Weather at Gibraltar Airport |  |  |  |  |  |
+|----|----|----|----|----|----|
+| Observations from the early hours of May 1, 2023 |  |  |  |  |  |
+| Measurement |  |  |  | Time |  |
+| temp | humidity | wind_speed | pressure | date | time |
+| 18.9 | 0.68 | 6.7 | 1015.2 | 2023-05-01 | 00:20 |
+| 18.9 | 0.73 | 7.2 | 1015.2 | 2023-05-01 | 00:50 |
+| 17.8 | 0.77 | 6.7 | 1014.6 | 2023-05-01 | 01:20 |
+| 18.9 | 0.73 | 6.7 | 1014.6 | 2023-05-01 | 01:50 |
+| 18.9 | 0.68 | 6.7 | 1014.6 | 2023-05-01 | 02:20 |
+| 17.8 | 0.73 | 6.7 | 1014.6 | 2023-05-01 | 02:50 |
+| 17.8 | 0.73 | 7.2 | 1014.6 | 2023-05-01 | 03:20 |
+| 17.8 | 0.73 | 6.3 | 1013.5 | 2023-05-01 | 03:50 |
+| 18.9 | 0.64 | 4.0 | 1014.6 | 2023-05-01 | 04:20 |
+| 18.9 | 0.64 | 3.1 | 1014.6 | 2023-05-01 | 04:50 |
+
+## Moving and Relabeling Columns
+
+We can do two more things to make this presentable:
+
+- move the `Time` columns to the beginning of the series (using [cols_move_to_start()](../reference/GT.cols_move_to_start.md#great_tables.GT.cols_move_to_start))
+- customize the column labels so that they are more descriptive (using [cols_label()](../reference/GT.cols_label.md#great_tables.GT.cols_label))
+
+Let's do both of these things in the next example:
+
+``` python
+(
+    gt_gibraltar
+    .cols_move_to_start(columns=["date", "time"])
+    .cols_label(
+        date="Date",
+        time="Time",
+        temp=html("Temp,<br>&deg;C"),
+        humidity="Humidity",
+        wind_speed=html("Wind,<br>m s<sup>&minus;1</sup>"),
+        pressure=html("Pressure,<br>hPa")
+    )
+)
+```
+
+[TABLE]
+
+Column order matters because readers scan left to right. Placing the most important or identifying columns first improves usability. In many tables, time or context columns work well on the left, with measurements and results on the right. This mirrors how people naturally ask questions about data: "when and where" before "what happened."
+
+Note that even though columns were moved using [cols_move_to_start()](../reference/GT.cols_move_to_start.md#great_tables.GT.cols_move_to_start), the *spanner column labels* still spanned above the correct *column labels*. There are a number of methods on [GT](../reference/GT.md#great_tables.GT) to move columns, including [cols_move()](../reference/GT.cols_move.md#great_tables.GT.cols_move), [cols_move_to_end()](../reference/GT.cols_move_to_end.md#great_tables.GT.cols_move_to_end). And there's even a method to hide columns: [cols_hide()](../reference/GT.cols_hide.md#great_tables.GT.cols_hide).
+
+Multiple columns can be renamed in a single use of [cols_label()](../reference/GT.cols_label.md#great_tables.GT.cols_label). Further to this, the helper functions [md()](../reference/md.md#great_tables.md) and [html()](../reference/html.md#great_tables.md) can be used to create column labels with additional styling. In the above example, we provided column labels as HTML so that we can insert linebreaks with `<br>`, insert a superscripted `−1` (with `<sup>&minus;1</sup>`), and insert a degree symbol as an HTML entity (`&deg;`).
+
+## Targeting Columns for `columns=`
+
+In the above examples, we selected columns to span or move using a list of column names (as strings). However, **Great Tables** supports a wide range of ways to select columns.
+
+For example, you can use a lambda function:
+
+``` python
+(
+    GT(gibraltar_mini)
+    .cols_move_to_start(columns=lambda colname: colname.startswith("wind"))
+)
+```
+
+| wind_speed | temp | humidity | pressure | date       | time  |
+|------------|------|----------|----------|------------|-------|
+| 6.7        | 18.9 | 0.68     | 1015.2   | 2023-05-01 | 00:20 |
+| 7.2        | 18.9 | 0.73     | 1015.2   | 2023-05-01 | 00:50 |
+| 6.7        | 17.8 | 0.77     | 1014.6   | 2023-05-01 | 01:20 |
+| 6.7        | 18.9 | 0.73     | 1014.6   | 2023-05-01 | 01:50 |
+| 6.7        | 18.9 | 0.68     | 1014.6   | 2023-05-01 | 02:20 |
+| 6.7        | 17.8 | 0.73     | 1014.6   | 2023-05-01 | 02:50 |
+| 7.2        | 17.8 | 0.73     | 1014.6   | 2023-05-01 | 03:20 |
+| 6.3        | 17.8 | 0.73     | 1013.5   | 2023-05-01 | 03:50 |
+| 4.0        | 18.9 | 0.64     | 1014.6   | 2023-05-01 | 04:20 |
+| 3.1        | 18.9 | 0.64     | 1014.6   | 2023-05-01 | 04:50 |
+
+Inputs like strings, integers, and polars selectors are also supported. For more information, see [Column Selection](column-selection.md).
+
+Between spanners, relabeling, and reordering, you have full control over how your column labels communicate the structure of your data. These tools let you transform raw DataFrame column names into polished, informative headers that guide readers through the table.

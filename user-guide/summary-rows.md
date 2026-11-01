@@ -1,0 +1,315 @@
+# Summary Rows
+
+Summary rows provide aggregated values (such as totals, means, or counts) directly in the table, adjacent to the data they summarize. **Great Tables** supports two types: group-level summaries that appear next to each row group, and grand summaries that aggregate across the entire table. Both types let you define multiple aggregation functions at once and control where the summary appears.
+
+Embedding aggregations directly in the table keeps the reader's eye on the data. When a total or average lives in a separate paragraph or a footnote, the reader has to scan back and forth between the table and the surrounding text to compare a group's summary to its individual rows. Summary rows eliminate that friction by placing the computed values right next to the data they describe.
+
+## Setting Up the Example Data
+
+For these examples, we will use a sales dataset with row groups representing different product categories.
+
+``` python
+import polars as pl
+from great_tables import GT
+
+sales_df = pl.DataFrame({
+    "product": ["Laptop", "Mouse", "Keyboard", "Monitor", "Webcam", "Headset"],
+    "category": ["Computing", "Computing", "Computing", "Peripherals", "Peripherals", "Peripherals"],
+    "units_sold": [45, 230, 180, 65, 120, 95],
+    "revenue": [67500, 4600, 9000, 19500, 6000, 7125],
+})
+
+gt_sales = (
+    GT(sales_df, rowname_col="product", groupname_col="category")
+    .tab_header(title="Q4 Product Sales", subtitle="By category")
+    .fmt_number(columns="revenue", decimals=0, use_seps=True)
+)
+
+gt_sales
+```
+
+| Q4 Product Sales |            |         |
+|------------------|------------|---------|
+| By category      |            |         |
+|                  | units_sold | revenue |
+| Computing        |            |         |
+| Laptop           | 45         | 67,500  |
+| Mouse            | 230        | 4,600   |
+| Keyboard         | 180        | 9,000   |
+| Peripherals      |            |         |
+| Monitor          | 65         | 19,500  |
+| Webcam           | 120        | 6,000   |
+| Headset          | 95         | 7,125   |
+
+This table has two row groups: `"Computing"` and `"Peripherals"`. We can now add summaries at the group level and at the grand level.
+
+## Group-Level Summary Rows
+
+The [summary_rows()](../reference/GT.summary_rows.md#great_tables.GT.summary_rows) method adds summary rows to each row group. You provide aggregation functions through the `fns=` argument as a dictionary, where keys become the summary row labels and values are the aggregation logic.
+
+When using a **Polars** DataFrame, the aggregation values should be Polars expressions.
+
+``` python
+(
+    gt_sales
+    .summary_rows(
+        fns={"Total": pl.col("units_sold", "revenue").sum()}
+    )
+)
+```
+
+| Q4 Product Sales |            |         |
+|------------------|------------|---------|
+| By category      |            |         |
+|                  | units_sold | revenue |
+| Computing        |            |         |
+| Laptop           | 45         | 67,500  |
+| Mouse            | 230        | 4,600   |
+| Keyboard         | 180        | 9,000   |
+| Total            | 455        | 81100   |
+| Peripherals      |            |         |
+| Monitor          | 65         | 19,500  |
+| Webcam           | 120        | 6,000   |
+| Headset          | 95         | 7,125   |
+| Total            | 280        | 32625   |
+
+Each row group now has a `"Total"` summary row at the bottom showing the sum of numeric columns within that group.
+
+### Multiple Aggregation Functions
+
+You can include several functions in the `fns=` dictionary to produce multiple summary rows per group.
+
+``` python
+(
+    gt_sales
+    .summary_rows(
+        fns={
+            "Total": pl.col("units_sold", "revenue").sum(),
+            "Average": pl.col("units_sold", "revenue").mean(),
+        }
+    )
+)
+```
+
+| Q4 Product Sales |                    |                    |
+|------------------|--------------------|--------------------|
+| By category      |                    |                    |
+|                  | units_sold         | revenue            |
+| Computing        |                    |                    |
+| Laptop           | 45                 | 67,500             |
+| Mouse            | 230                | 4,600              |
+| Keyboard         | 180                | 9,000              |
+| Total            | 455                | 81100              |
+| Average          | 151.66666666666666 | 27033.333333333332 |
+| Peripherals      |                    |                    |
+| Monitor          | 65                 | 19,500             |
+| Webcam           | 120                | 6,000              |
+| Headset          | 95                 | 7,125              |
+| Total            | 280                | 32625              |
+| Average          | 93.33333333333333  | 10875.0            |
+
+Both a `"Total"` and an `"Average"` row now appear at the bottom of each group.
+
+### Placing Summaries at the Top
+
+By default, summary rows appear at the bottom of each group. You can place them at the top instead by setting `side="top"`.
+
+``` python
+(
+    gt_sales
+    .summary_rows(
+        fns={"Total": pl.col("units_sold", "revenue").sum()},
+        side="top"
+    )
+)
+```
+
+| Q4 Product Sales |            |         |
+|------------------|------------|---------|
+| By category      |            |         |
+|                  | units_sold | revenue |
+| Computing        |            |         |
+| Total            | 455        | 81100   |
+| Laptop           | 45         | 67,500  |
+| Mouse            | 230        | 4,600   |
+| Keyboard         | 180        | 9,000   |
+| Peripherals      |            |         |
+| Total            | 280        | 32625   |
+| Monitor          | 65         | 19,500  |
+| Webcam           | 120        | 6,000   |
+| Headset          | 95         | 7,125   |
+
+The summary row now sits above the data rows in each group rather than below them, making the totals immediately visible.
+
+Top placement works well when the summary is the main takeaway and the detail rows serve as supporting evidence. Readers see the headline number first and can drill into the breakdown below it. Bottom placement (the default) follows the more conventional reading order where you examine the data first and arrive at the summary as a natural conclusion.
+
+### Targeting Specific Groups
+
+If you only want summaries for certain groups, use the `groups=` argument with a list of group names.
+
+``` python
+(
+    gt_sales
+    .summary_rows(
+        fns={"Total": pl.col("units_sold", "revenue").sum()},
+        groups=["Computing"]
+    )
+)
+```
+
+| Q4 Product Sales |            |         |
+|------------------|------------|---------|
+| By category      |            |         |
+|                  | units_sold | revenue |
+| Computing        |            |         |
+| Laptop           | 45         | 67,500  |
+| Mouse            | 230        | 4,600   |
+| Keyboard         | 180        | 9,000   |
+| Total            | 455        | 81100   |
+| Peripherals      |            |         |
+| Monitor          | 65         | 19,500  |
+| Webcam           | 120        | 6,000   |
+| Headset          | 95         | 7,125   |
+
+Only the `"Computing"` group receives a summary row.
+
+## Grand Summary Rows
+
+The [grand_summary_rows()](../reference/GT.grand_summary_rows.md#great_tables.GT.grand_summary_rows) method works the same way as [summary_rows()](../reference/GT.summary_rows.md#great_tables.GT.summary_rows), but it aggregates across all data in the table regardless of row groups. The resulting summary rows appear at the very bottom (or top) of the table.
+
+``` python
+(
+    gt_sales
+    .grand_summary_rows(
+        fns={"Grand Total": pl.col("units_sold", "revenue").sum()}
+    )
+)
+```
+
+| Q4 Product Sales |            |         |
+|------------------|------------|---------|
+| By category      |            |         |
+|                  | units_sold | revenue |
+| Computing        |            |         |
+| Laptop           | 45         | 67,500  |
+| Mouse            | 230        | 4,600   |
+| Keyboard         | 180        | 9,000   |
+| Peripherals      |            |         |
+| Monitor          | 65         | 19,500  |
+| Webcam           | 120        | 6,000   |
+| Headset          | 95         | 7,125   |
+| Grand Total      | 735        | 113725  |
+
+A single `"Grand Total"` row appears below all row groups, showing the overall totals.
+
+### Combining Group and Grand Summaries
+
+You can use both [summary_rows()](../reference/GT.summary_rows.md#great_tables.GT.summary_rows) and [grand_summary_rows()](../reference/GT.grand_summary_rows.md#great_tables.GT.grand_summary_rows) on the same table to provide aggregation at both levels.
+
+``` python
+(
+    gt_sales
+    .summary_rows(
+        fns={"Subtotal": pl.col("units_sold", "revenue").sum()}
+    )
+    .grand_summary_rows(
+        fns={
+            "Grand Total": pl.col("units_sold", "revenue").sum(),
+            "Overall Average": pl.col("units_sold", "revenue").mean(),
+        }
+    )
+)
+```
+
+| Q4 Product Sales |            |                    |
+|------------------|------------|--------------------|
+| By category      |            |                    |
+|                  | units_sold | revenue            |
+| Computing        |            |                    |
+| Laptop           | 45         | 67,500             |
+| Mouse            | 230        | 4,600              |
+| Keyboard         | 180        | 9,000              |
+| Subtotal         | 455        | 81100              |
+| Peripherals      |            |                    |
+| Monitor          | 65         | 19,500             |
+| Webcam           | 120        | 6,000              |
+| Headset          | 95         | 7,125              |
+| Subtotal         | 280        | 32625              |
+| Grand Total      | 735        | 113725             |
+| Overall Average  | 122.5      | 18954.166666666668 |
+
+Each group now has a `"Subtotal"` row, and the table finishes with a `"Grand Total"` and `"Overall Average"` row that span across all groups.
+
+This combination of group and grand summaries is common in financial and sales reporting, where readers expect both subtotals per category and an overall total. The visual hierarchy (group summaries, then a grand summary at the bottom) mirrors how people naturally reason about grouped data: understand the parts first, then see how they add up to the whole.
+
+## Working with Pandas DataFrames
+
+When using a **Pandas** DataFrame, the aggregation functions receive a Pandas DataFrame and should work accordingly.
+
+``` python
+import pandas as pd
+
+sales_pd = pd.DataFrame({
+    "product": ["Laptop", "Mouse", "Keyboard", "Monitor", "Webcam", "Headset"],
+    "category": ["Computing", "Computing", "Computing", "Peripherals", "Peripherals", "Peripherals"],
+    "units_sold": [45, 230, 180, 65, 120, 95],
+    "revenue": [67500, 4600, 9000, 19500, 6000, 7125],
+})
+
+(
+    GT(sales_pd, rowname_col="product", groupname_col="category")
+    .fmt_number(columns="revenue", decimals=0, use_seps=True)
+    .grand_summary_rows(
+        fns={"Total": lambda df: df.sum(numeric_only=True)}
+    )
+)
+```
+
+|             | units_sold | revenue |
+|-------------|------------|---------|
+| Computing   |            |         |
+| Laptop      | 45         | 67,500  |
+| Mouse       | 230        | 4,600   |
+| Keyboard    | 180        | 9,000   |
+| Peripherals |            |         |
+| Monitor     | 65         | 19,500  |
+| Webcam      | 120        | 6,000   |
+| Headset     | 95         | 7,125   |
+| Total       | 735        | 113725  |
+
+The `numeric_only=True` argument ensures that only numeric columns are summed, avoiding errors with string columns.
+
+## Styling Summary Rows
+
+Summary rows can be styled using [loc.grand_summary()](../reference/loc.grand_summary.md#great_tables.loc.grand_summary) and `loc.summary()` with [tab_style()](../reference/GT.tab_style.md#great_tables.GT.tab_style). This lets you visually distinguish summary rows from data rows.
+
+``` python
+from great_tables import loc, style
+
+(
+    gt_sales
+    .grand_summary_rows(
+        fns={"Grand Total": pl.col("units_sold", "revenue").sum()}
+    )
+    .tab_style(
+        style=style.fill(color="lightyellow"),
+        locations=loc.grand_summary()
+    )
+)
+```
+
+| Q4 Product Sales |            |         |
+|------------------|------------|---------|
+| By category      |            |         |
+|                  | units_sold | revenue |
+| Computing        |            |         |
+| Laptop           | 45         | 67,500  |
+| Mouse            | 230        | 4,600   |
+| Keyboard         | 180        | 9,000   |
+| Peripherals      |            |         |
+| Monitor          | 65         | 19,500  |
+| Webcam           | 120        | 6,000   |
+| Headset          | 95         | 7,125   |
+| Grand Total      | 735        | 113725  |
+
+Summary rows are a natural companion to row groups, providing the aggregated context that readers need to interpret grouped data. By combining group-level and grand summaries, formatting, and targeted styling, you can build tables that tell a complete analytical story.

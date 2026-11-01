@@ -1,0 +1,221 @@
+# Header, Footer, and Stub
+
+Three structural components frame the data in your table: the **Table Header** introduces it with a title and optional subtitle, the **Table Footer** anchors it with source notes or other supplementary information, and the **Stub** provides a left-hand column of row identifiers. All three are added using the `tab_*()` family of methods.
+
+A well-structured frame transforms a bare data grid into something self-explanatory. Without these components, your reader has to look outside the table for context: what is this data? Where did it come from? What do the rows represent? Adding a header, footer, and stub answers those questions inside the table itself, so it can stand on its own in a report, slide deck, or web page.
+
+## Adding a Table Header
+
+A **Table Header** is easy to add with the [tab_header()](../reference/GT.tab_header.md#great_tables.GT.tab_header) method. Let's see how a basic table looks with a *title* and a *subtitle*:
+
+``` python
+from great_tables import GT, md, html
+from great_tables.data import countrypops
+
+# Get the ten most populous countries in 2022
+countries_mini = (
+    countrypops[countrypops["year"] == 2022]
+    .sort_values("population", ascending=False)
+    .head(10)[["country_name", "population"]]
+)
+
+# Make a display table with the `countries_mini` table and
+# put a heading just above the column labels
+(
+    GT(countries_mini)
+    .tab_header(
+        title = "The World's Most Populous Countries",
+        subtitle = "The top ten in 2022 are presented"
+    )
+)
+```
+
+| The World's Most Populous Countries |            |
+|-------------------------------------|------------|
+| The top ten in 2022 are presented   |            |
+| country_name                        | population |
+| India                               | 1417173173 |
+| China                               | 1412175000 |
+| United States                       | 333287557  |
+| Indonesia                           | 275501339  |
+| Pakistan                            | 235824862  |
+| Nigeria                             | 218541212  |
+| Brazil                              | 215313498  |
+| Bangladesh                          | 171186372  |
+| Russian Federation                  | 143555736  |
+| Mexico                              | 127504125  |
+
+As a rule of thumb, any table that will be seen outside your own notebook benefits from a title. It also immediately orients the reader as to what the table's all about.
+
+The **Header** provides an opportunity to describe the data that's presented. Using `subtitle=` allows us to insert a subtitle, which is an optional part of the **Header**. We may also style the `title=` and `subtitle=` using Markdown! We do this by wrapping the values passed to `title=` or `subtitle=` with the [md()](../reference/md.md#great_tables.md) helper function (we may also use [html()](../reference/html.md#great_tables.md) in a similar fashion). Here is an example with the table data truncated for brevity:
+
+``` python
+# Make a display table with the `countries_mini` table and
+# put a heading just above the column labels
+gt_tbl = (
+    GT(countries_mini.head(2))
+    .tab_header(
+        title = md("The *World's* Most Populous Countries &#x1F310;"),
+        subtitle = md("The top **ten** in 2022 are presented")
+    )
+)
+
+gt_tbl
+```
+
+| The *World's* Most Populous Countries 🌐 |            |
+|------------------------------------------|------------|
+| The top **ten** in 2022 are presented    |            |
+| country_name                             | population |
+| India                                    | 1417173173 |
+| China                                    | 1412175000 |
+
+With a title and subtitle in place, the reader immediately knows what the table is about before looking at any data.
+
+## Adding Source Notes
+
+A *source note* can be added to the table's **Footer** through use of the [tab_source_note()](../reference/GT.tab_source_note.md#great_tables.GT.tab_source_note) method. It works in the same way as [tab_header()](../reference/GT.tab_header.md#great_tables.GT.tab_header) (it also allows for Markdown inputs) except it can be called multiple times. Each invocation results in the addition of a source note.
+
+``` python
+# Display the `countries_mini` data with a heading and two source notes
+(
+    gt_tbl
+    .tab_source_note(
+        source_note = "Total population counts all residents regardless of legal status or citizenship."
+    )
+    .tab_source_note(
+        source_note = md("Source: [The World Bank](https://data.worldbank.org/indicator/SP.POP.TOTL).")
+    )
+)
+```
+
+| The *World's* Most Populous Countries 🌐 |  |
+|----|----|
+| The top **ten** in 2022 are presented |  |
+| country_name | population |
+| India | 1417173173 |
+| China | 1412175000 |
+| Total population counts all residents regardless of legal status or citizenship. |  |
+| Source: [The World Bank](https://data.worldbank.org/indicator/SP.POP.TOTL). |  |
+
+Source notes are pretty valuable because they provide provenance and credibility. Academic and business audiences might expect to know where data comes from. Including that information directly in the table saves readers from hunting through surrounding text. Source notes are also a good place for methodological caveats or disclaimers that apply to the entire table.
+
+With just a few method calls, we have added essential context to the table. The title and subtitle tell the reader what data is being presented, and the source notes provide attribution. Together, these components frame the table body and help your audience understand the data at a glance.
+
+## The Stub: Row Labels
+
+The **Stub** is good to have whenever the first column of your data serves as an identifier rather than a measured value. Moving identifiers into the stub visually separates "what this row is about" from "what was measured", making the table easier to scan. If your rows represent people, places, time periods, or categories, those labels would go nicely in the stub.
+
+The **Stub** is the area to the left of the table body that typically contains *row labels* and may also contain *row group labels*. Those subparts can be grouped in a sequence of *row groups*. The **Stub Head** provides a location for a label that describes the **Stub** (and could also be used to describe the column labels). The **Stub** is optional since there are cases where it wouldn't be useful (the display tables presented earlier looked just fine without one).
+
+An easy way to generate a **Stub** part is by specifying a stub column in the [GT()](../reference/GT.md#great_tables.GT) class with the `rowname_col=` argument. This will signal to **Great Tables** that the named column should be used as the stub, using the contents of that column to make *row labels*. Let's add a stub with our `countries_mini` table by using `rowname_col=` in the call to [GT](../reference/GT.md#great_tables.GT):
+
+``` python
+GT(countries_mini).tab_stub(rowname_col="country_name")
+```
+
+|                    | population |
+|--------------------|------------|
+| India              | 1417173173 |
+| China              | 1412175000 |
+| United States      | 333287557  |
+| Indonesia          | 275501339  |
+| Pakistan           | 235824862  |
+| Nigeria            | 218541212  |
+| Brazil             | 215313498  |
+| Bangladesh         | 171186372  |
+| Russian Federation | 143555736  |
+| Mexico             | 127504125  |
+
+Notice that the country names are now placed to the left? That's the **Stub**. Notably, there is a prominent border to the right of it but there's no label above the **Stub**. We can change this and apply what's known as a *stubhead label* through use of the [tab_stubhead()](../reference/GT.tab_stubhead.md#great_tables.GT.tab_stubhead) method:
+
+``` python
+(
+    GT(countries_mini)
+    .tab_stub(rowname_col="country_name")
+    .tab_stubhead(label="country")
+)
+```
+
+| country            | population |
+|--------------------|------------|
+| India              | 1417173173 |
+| China              | 1412175000 |
+| United States      | 333287557  |
+| Indonesia          | 275501339  |
+| Pakistan           | 235824862  |
+| Nigeria            | 218541212  |
+| Brazil             | 215313498  |
+| Bangladesh         | 171186372  |
+| Russian Federation | 143555736  |
+| Mexico             | 127504125  |
+
+A very important thing to note here is that the table now has one column. Before, when there was no **Stub**, two columns were present (with the **Column Labels** of `"country_name"` and `"population"`) but now column number `1` (the only column remaining) is `population`.
+
+## Row Groups
+
+Grouping is most useful when your data has a natural categorical structure and you want readers to compare within and across categories. Rather than forcing the reader to mentally sort the rows, row groups do that work up front.
+
+Let's incorporate row groups into the display table. This divides rows into groups, creating *row groups*, and results in a display of a *row group labels* right above each group. This can be easily done with a table containing row labels and the key is to use the `groupname_col=` argument of the [GT](../reference/GT.md#great_tables.GT) class. Here we will create four row groups (with row group labels `"Asia"`, `"Americas"`, `"Africa"`, and `"Europe"`) to have a grouping of rows.
+
+``` python
+regions = {
+    "India": "Asia", "China": "Asia", "Indonesia": "Asia", "Pakistan": "Asia",
+    "Bangladesh": "Asia", "United States": "Americas", "Brazil": "Americas",
+    "Mexico": "Americas", "Nigeria": "Africa", "Russian Federation": "Europe",
+}
+
+country_groups = countries_mini.assign(region = countries_mini["country_name"].map(regions))
+
+(
+    GT(country_groups)
+    .tab_stub(rowname_col="country_name", groupname_col="region")
+    .tab_stubhead(label="country")
+)
+```
+
+| country            | population |
+|--------------------|------------|
+| Asia               |            |
+| India              | 1417173173 |
+| China              | 1412175000 |
+| Indonesia          | 275501339  |
+| Pakistan           | 235824862  |
+| Bangladesh         | 171186372  |
+| Americas           |            |
+| United States      | 333287557  |
+| Brazil             | 215313498  |
+| Mexico             | 127504125  |
+| Africa             |            |
+| Nigeria            | 218541212  |
+| Europe             |            |
+| Russian Federation | 143555736  |
+
+The table now groups its rows by region, with labels appearing above each group. Row groups make it much easier for readers to scan and compare related entries.
+
+## GT Convenience Arguments
+
+Rather than using the [tab_stub()](../reference/GT.tab_stub.md#great_tables.GT.tab_stub) method, the `GT(rowname_col=..., groupname_col=...)` arguments provide a quick way to specify row names and groups.
+
+``` python
+GT(country_groups, rowname_col="country_name", groupname_col="region")
+```
+
+|                    | population |
+|--------------------|------------|
+| Asia               |            |
+| India              | 1417173173 |
+| China              | 1412175000 |
+| Indonesia          | 275501339  |
+| Pakistan           | 235824862  |
+| Bangladesh         | 171186372  |
+| Americas           |            |
+| United States      | 333287557  |
+| Brazil             | 215313498  |
+| Mexico             | 127504125  |
+| Africa             |            |
+| Nigeria            | 218541212  |
+| Europe             |            |
+| Russian Federation | 143555736  |
+
+The stub provides a clear organizational framework for your data by separating identifiers from values. Whether you simply need named rows or a fully grouped hierarchy, the combination of `rowname_col=`, `groupname_col=`, and [tab_stubhead()](../reference/GT.tab_stubhead.md#great_tables.GT.tab_stubhead) gives you precise control over how readers navigate your table.

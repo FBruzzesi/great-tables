@@ -1,0 +1,280 @@
+# Using Polars to Win at Super Bowl Squares
+
+The Super Bowl is upon us, and with it the glittering squares of chance. Maybe you've seen Super Bowl Squares at your work. Maybe you've played it with your pals. Or maybe you have no idea what it is.
+
+Whether you're a Squares-head or not, this post will help you win with data.
+
+## What is Super Bowl Squares?
+
+Super Bowl Squares is a betting game, where you bet on the final digits of each team in a game.
+
+For example, here are some scores with the final digit bolded:
+
+- Home team score: 1**4**
+- Away team score: **7**
+
+So the final digits would be:
+
+- Home team digit: 4
+- Away team digit: 7
+
+Let's say you choose the digits above, and write this as 4/7--meaning a final digit of 4 for home and 7 for away. You would mark yourself on this square:
+
+``` python
+df = (
+    pl.DataFrame({"x": list(range(10))})
+    .join(pl.DataFrame({"y": list(range(10)), "z": "_._"}), how="cross")
+    .with_columns(
+        z=pl.when((pl.col("x") == 7) & (pl.col("y") == 4)).then(pl.lit("4/7")).otherwise("z")
+    )
+    .pivot(index="x", values="z", on="y")
+    .with_row_index()
+)
+
+(
+    GT(df, rowname_col="x")
+    .tab_header("Example Superbowl Square")
+    .tab_spanner("Home", cs.all())
+    .tab_style(style.fill("green"), loc.body(columns="4", rows=pl.col("index") == 7))
+    .tab_style(style.text(color="#FFFFFF", weight="bold"), loc.body())
+    .cols_hide("index")
+    .tab_stubhead("Away")
+)
+```
+
+| Example Superbowl Square |  |  |  |  |  |  |  |  |  |  |
+|----|----|----|----|----|----|----|----|----|----|----|
+| Away | Home |  |  |  |  |  |  |  |  |  |
+|  | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 |
+| 0 | \_.\_ | \_.\_ | \_.\_ | \_.\_ | \_.\_ | \_.\_ | \_.\_ | \_.\_ | \_.\_ | \_.\_ |
+| 1 | \_.\_ | \_.\_ | \_.\_ | \_.\_ | \_.\_ | \_.\_ | \_.\_ | \_.\_ | \_.\_ | \_.\_ |
+| 2 | \_.\_ | \_.\_ | \_.\_ | \_.\_ | \_.\_ | \_.\_ | \_.\_ | \_.\_ | \_.\_ | \_.\_ |
+| 3 | \_.\_ | \_.\_ | \_.\_ | \_.\_ | \_.\_ | \_.\_ | \_.\_ | \_.\_ | \_.\_ | \_.\_ |
+| 4 | \_.\_ | \_.\_ | \_.\_ | \_.\_ | \_.\_ | \_.\_ | \_.\_ | \_.\_ | \_.\_ | \_.\_ |
+| 5 | \_.\_ | \_.\_ | \_.\_ | \_.\_ | \_.\_ | \_.\_ | \_.\_ | \_.\_ | \_.\_ | \_.\_ |
+| 6 | \_.\_ | \_.\_ | \_.\_ | \_.\_ | \_.\_ | \_.\_ | \_.\_ | \_.\_ | \_.\_ | \_.\_ |
+| 7 | \_.\_ | \_.\_ | \_.\_ | \_.\_ | 4/7 | \_.\_ | \_.\_ | \_.\_ | \_.\_ | \_.\_ |
+| 8 | \_.\_ | \_.\_ | \_.\_ | \_.\_ | \_.\_ | \_.\_ | \_.\_ | \_.\_ | \_.\_ | \_.\_ |
+| 9 | \_.\_ | \_.\_ | \_.\_ | \_.\_ | \_.\_ | \_.\_ | \_.\_ | \_.\_ | \_.\_ | \_.\_ |
+
+If the final score ends up being Home 4, Away 7--ding ding ding, big winner--you win the pool, and hopefully take home some combination of money and glory. For more details on playing, see [this WikiHow article](https://www.wikihow.com/Play-Football-Squares).
+
+## Why analyze squares?
+
+Not all options in a Super Bowl Squares are created equal. This is because there are specific point values you can add to your score. For example, touchdowns often to result in 7 points, and its common to score 3 points via a field goal. This means that ending up with a final digit of 5 is uncommon.
+
+Analyzing the chance of each square winning let's you pick the best ones. (In some versions of Super Bowl Squares, the squares get randomly assigned to people. In that case, knowing the chance of winning tells you whether you got a bum deal or not ;).
+
+## What squares are most likely to win?
+
+We looked back at games for the KC Chiefs (away), and games for the San Francisco 49ers (home), and calculated the proportion of the time each team ended with a specific digit. Putting this together for the two teams, here is the chance of winning on a given square:
+
+``` python
+import polars as pl
+import polars.selectors as cs
+from great_tables import GT, md
+
+
+# Utilities -----
+
+
+def calc_n(df: pl.DataFrame, colname: str):
+    """Count the number of final digits observed across games."""
+
+    return df.select(final_digit=pl.col(colname).mod(10)).group_by("final_digit").agg(n=pl.len())
+
+
+def team_final_digits(game: pl.DataFrame, team_code: str) -> pl.DataFrame:
+    """Calculate a team's proportion of digits across games (both home and away)."""
+
+    home_n = calc_n(game.filter(pl.col("home_team") == team_code), "home_score")
+    away_n = calc_n(game.filter(pl.col("away_team") == team_code), "away_score")
+
+    joined = (
+        home_n.join(away_n, "final_digit")
+        .select("final_digit", n=pl.col("n") + pl.col("n_right"))
+        .with_columns(prop=pl.col("n") / pl.col("n").sum())
+    )
+
+    return joined
+
+
+# Analysis -----
+
+games = pl.read_csv("./games.csv").filter(
+    pl.col("game_id") != "2023_22_SF_KC",
+    pl.col("season") >= 2015,
+)
+
+# Individual probabilities of final digits per team
+home = team_final_digits(games, "KC")
+away = team_final_digits(games, "SF")
+
+# Cross and multiply p(digit | team=KC)p(digit | team=SF) to get
+# the joint probability p(digit_KC, digit_SF | KC, SF)
+joint = (
+    home.join(away, how="cross")
+    .with_columns(joint=pl.col("prop") * pl.col("prop_right"))
+    .sort("final_digit", "final_digit_right")
+    .pivot(values="joint", on="final_digit_right", index="final_digit")
+    .with_columns((cs.exclude("final_digit") * 100).round(1))
+)
+
+# Display -----
+
+(
+    GT(joint, rowname_col="final_digit")
+    .data_color(domain=[0, 4], palette=["red", "grey", "blue"])
+    .tab_header(
+        "Super Bowl Squares | Final Score Probabilities",
+        "Based on all NFL regular season and playoff games (2015-2023)",
+    )
+    .tab_stubhead("")
+    .tab_spanner("San Francisco 49ers", cs.all())
+    .tab_stubhead("KC Chiefs")
+    .tab_source_note(
+        md(
+            '<span style="float: right;">Source data: [Lee Sharpe, nflverse](https://github.com/nflverse/nfldata)</span>'
+        )
+    )
+)
+```
+
+| Super Bowl Squares \| Final Score Probabilities |  |  |  |  |  |  |  |  |  |  |
+|----|----|----|----|----|----|----|----|----|----|----|
+| Based on all NFL regular season and playoff games (2015-2023) |  |  |  |  |  |  |  |  |  |  |
+| KC Chiefs | San Francisco 49ers |  |  |  |  |  |  |  |  |  |
+|  | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 |
+| 0 | 2.3 | 1.5 | 0.6 | 2.4 | 1.7 | 0.9 | 1.2 | 3.2 | 1.1 | 0.8 |
+| 1 | 1.8 | 1.2 | 0.5 | 1.9 | 1.3 | 0.7 | 0.9 | 2.6 | 0.9 | 0.6 |
+| 2 | 1.1 | 0.7 | 0.3 | 1.2 | 0.8 | 0.4 | 0.6 | 1.6 | 0.5 | 0.4 |
+| 3 | 1.7 | 1.1 | 0.5 | 1.8 | 1.3 | 0.7 | 0.9 | 2.5 | 0.8 | 0.6 |
+| 4 | 1.8 | 1.2 | 0.5 | 1.9 | 1.3 | 0.7 | 0.9 | 2.6 | 0.9 | 0.6 |
+| 5 | 0.7 | 0.5 | 0.2 | 0.7 | 0.5 | 0.3 | 0.4 | 1.0 | 0.3 | 0.2 |
+| 6 | 1.0 | 0.6 | 0.2 | 1.0 | 0.7 | 0.4 | 0.5 | 1.4 | 0.5 | 0.3 |
+| 7 | 2.3 | 1.5 | 0.6 | 2.4 | 1.7 | 0.9 | 1.2 | 3.4 | 1.1 | 0.8 |
+| 8 | 0.8 | 0.5 | 0.2 | 0.8 | 0.6 | 0.3 | 0.4 | 1.1 | 0.4 | 0.3 |
+| 9 | 1.0 | 0.7 | 0.3 | 1.1 | 0.8 | 0.4 | 0.5 | 1.5 | 0.5 | 0.4 |
+| Source data: [Lee Sharpe, nflverse](https://github.com/nflverse/nfldata) |  |  |  |  |  |  |  |  |  |  |
+
+Notice how much higher the chance of winning on any score involving 7 is. This shows up in two places on the table:
+
+- Across the 7 row (i.e. KC Chiefs end with a 7)
+- Down the 7 column (i.e. S.F. 49ers ends with a 7)
+
+Moreover, the 7/7 square has the highest chance (3.4%). Some other good squares are 7/0 (or 0/7), and 0/0.
+
+## Go forth and win the respect of your coworkers
+
+We hope this square will make you the envy of your coworkers. Here at Great Tables, we're not just interested in the beautiful display of tables, but your success in defeating the person in the cubicle next to you.
+
+As a final shout out, we used the python data analysis tool Polars for all the data analysis. Using Polars with Great Tables was a total delight. To learn more about how we analyzed the data, along with the code, see the appendix below!
+
+> **Note: Appendix: analysis and code**
+>
+> ## Appendix: analysis and code
+>
+> ### Method
+>
+> In order to calculate the probability of a given square winning, we focused on the joint probability of observing a final digit for the home team AND a final digit for the away team.
+>
+> This can be expressed as `p(home_digit, away_digit | home="SF", away="KC")`. Note that the probability is conditioned on the teams playing in the Super Bowl. In order to estimate this, we `p(digit | team="SF")*p(digit | team="KC")`.
+>
+> This essentially makes two assumptions:
+>
+> 1.  That the final digit does not depend on whether a team is home or away (though it may depend on the team playing).
+> 2.  That the final digit for a given team is independent of the team they are playing.
+>
+> Another way to think about this is that digit is being modeled as if each team is drawing a ball numbered 0-9 from their own urn. We are modelling the chance of observing a pair of numbers, corresponding to a draw from each team's urns.
+>
+> The code for this analysis is in [this python script on github](https://github.com/posit-dev/great-tables/blob/main/docs/blog/superbowl-squares/_code.py), and is included below:
+>
+> ### Code
+>
+> ``` python
+> import polars as pl
+> import polars.selectors as cs
+> from great_tables import GT, md
+>
+>
+> # Utilities -----
+>
+>
+> def calc_n(df: pl.DataFrame, colname: str):
+>     """Count the number of final digits observed across games."""
+>
+>     return df.select(final_digit=pl.col(colname).mod(10)).group_by("final_digit").agg(n=pl.len())
+>
+>
+> def team_final_digits(game: pl.DataFrame, team_code: str) -> pl.DataFrame:
+>     """Calculate a team's proportion of digits across games (both home and away)."""
+>
+>     home_n = calc_n(game.filter(pl.col("home_team") == team_code), "home_score")
+>     away_n = calc_n(game.filter(pl.col("away_team") == team_code), "away_score")
+>
+>     joined = (
+>         home_n.join(away_n, "final_digit")
+>         .select("final_digit", n=pl.col("n") + pl.col("n_right"))
+>         .with_columns(prop=pl.col("n") / pl.col("n").sum())
+>     )
+>
+>     return joined
+>
+>
+> # Analysis -----
+>
+> games = pl.read_csv("./games.csv").filter(
+>     pl.col("game_id") != "2023_22_SF_KC",
+>     pl.col("season") >= 2015,
+> )
+>
+> # Individual probabilities of final digits per team
+> home = team_final_digits(games, "KC")
+> away = team_final_digits(games, "SF")
+>
+> # Cross and multiply p(digit | team=KC)p(digit | team=SF) to get
+> # the joint probability p(digit_KC, digit_SF | KC, SF)
+> joint = (
+>     home.join(away, how="cross")
+>     .with_columns(joint=pl.col("prop") * pl.col("prop_right"))
+>     .sort("final_digit", "final_digit_right")
+>     .pivot(values="joint", on="final_digit_right", index="final_digit")
+>     .with_columns((cs.exclude("final_digit") * 100).round(1))
+> )
+>
+> # Display -----
+>
+> (
+>     GT(joint, rowname_col="final_digit")
+>     .data_color(domain=[0, 4], palette=["red", "grey", "blue"])
+>     .tab_header(
+>         "Super Bowl Squares | Final Score Probabilities",
+>         "Based on all NFL regular season and playoff games (2015-2023)",
+>     )
+>     .tab_stubhead("")
+>     .tab_spanner("San Francisco 49ers", cs.all())
+>     .tab_stubhead("KC Chiefs")
+>     .tab_source_note(
+>         md(
+>             '<span style="float: right;">Source data: [Lee Sharpe, nflverse](https://github.com/nflverse/nfldata)</span>'
+>         )
+>     )
+> )
+> ```
+>
+> | Super Bowl Squares \| Final Score Probabilities |  |  |  |  |  |  |  |  |  |  |
+> |----|----|----|----|----|----|----|----|----|----|----|
+> | Based on all NFL regular season and playoff games (2015-2023) |  |  |  |  |  |  |  |  |  |  |
+> | KC Chiefs | San Francisco 49ers |  |  |  |  |  |  |  |  |  |
+> |  | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 |
+> | 0 | 2.3 | 1.5 | 0.6 | 2.4 | 1.7 | 0.9 | 1.2 | 3.2 | 1.1 | 0.8 |
+> | 1 | 1.8 | 1.2 | 0.5 | 1.9 | 1.3 | 0.7 | 0.9 | 2.6 | 0.9 | 0.6 |
+> | 2 | 1.1 | 0.7 | 0.3 | 1.2 | 0.8 | 0.4 | 0.6 | 1.6 | 0.5 | 0.4 |
+> | 3 | 1.7 | 1.1 | 0.5 | 1.8 | 1.3 | 0.7 | 0.9 | 2.5 | 0.8 | 0.6 |
+> | 4 | 1.8 | 1.2 | 0.5 | 1.9 | 1.3 | 0.7 | 0.9 | 2.6 | 0.9 | 0.6 |
+> | 5 | 0.7 | 0.5 | 0.2 | 0.7 | 0.5 | 0.3 | 0.4 | 1.0 | 0.3 | 0.2 |
+> | 6 | 1.0 | 0.6 | 0.2 | 1.0 | 0.7 | 0.4 | 0.5 | 1.4 | 0.5 | 0.3 |
+> | 7 | 2.3 | 1.5 | 0.6 | 2.4 | 1.7 | 0.9 | 1.2 | 3.4 | 1.1 | 0.8 |
+> | 8 | 0.8 | 0.5 | 0.2 | 0.8 | 0.6 | 0.3 | 0.4 | 1.1 | 0.4 | 0.3 |
+> | 9 | 1.0 | 0.7 | 0.3 | 1.1 | 0.8 | 0.4 | 0.5 | 1.5 | 0.5 | 0.4 |
+> | Source data: [Lee Sharpe, nflverse](https://github.com/nflverse/nfldata) |  |  |  |  |  |  |  |  |  |  |
